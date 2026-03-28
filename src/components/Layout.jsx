@@ -160,19 +160,6 @@ export default function Layout({ activeTab, onTabChange, children }) {
           );
         })}
       </nav>
-
-      {/* Safe-area spacer — extends nav background behind the home indicator.
-          height-only, never affects button sizing or any other element. */}
-      <div
-        aria-hidden="true"
-        className="shrink-0 w-full"
-        style={{
-          height: 'env(safe-area-inset-bottom)',
-          backgroundColor: 'rgba(13, 13, 15, 0.75)',
-          backdropFilter: 'blur(20px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-        }}
-      />
     </div>
   );
 }
