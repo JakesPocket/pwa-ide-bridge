@@ -44,3 +44,26 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+.editor-cm-shell {
+  height: 100%;
+}
+
+.editor-cm-shell .cm-editor {
+  height: 100%;
+  font-size: 13px;
+}
+
+.editor-cm-shell .cm-scroller {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  line-height: 1.55;
+  -webkit-overflow-scrolling: touch;
+}
+
+.editor-cm-shell .cm-content {
+  caret-color: #61afef;
+}
+
+.editor-cm-shell .cm-selectionBackground {
+  background-color: rgba(97, 175, 239, 0.3) !important;
+}

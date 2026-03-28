@@ -1,5 +1,36 @@
 import { useState, useRef, useEffect } from 'react';
 import { apiUrl } from './config/server';
+import { readJson, writeJson, readText, writeText } from './utils/persist';
+
+const CHAT_MESSAGES_KEY = 'pocketide.chat.messages.v1';
+const CHAT_INPUT_KEY = 'pocketide.chat.input.v1';
+
+function readInitialMessages() {
+  const fallback = [
+    { role: 'agent', text: 'Hello! I am your autonomous coding agent. How can I help?' },
+  ];
+  const stored = readJson(CHAT_MESSAGES_KEY, null);
+  if (!Array.isArray(stored) || stored.length === 0) return fallback;
+
+  const next = stored
+    .filter((msg) => msg && typeof msg === 'object')
+    .map((msg) => {
+      if (msg.role === 'tool') {
+        return {
+          role: 'tool',
+          tool: typeof msg.tool === 'string' ? msg.tool : 'unknown',
+          done: Boolean(msg.done),
+        };
+      }
+      return {
+        role: typeof msg.role === 'string' ? msg.role : 'agent',
+        text: typeof msg.text === 'string' ? msg.text : '',
+      };
+    })
+    .filter((msg) => ['user', 'agent', 'reasoning', 'error', 'tool'].includes(msg.role));
+
+  return next.length > 0 ? next : fallback;
+}
 
 // ── Message types ──────────────────────────────────────────────────────────
 // { role: 'user',   text: string }
@@ -91,11 +122,9 @@ function ReasoningBubble({ text }) {
 }
 
 export default function Chat() {
-  const [messages, setMessages] = useState([
-    { role: 'agent', text: 'Hello! I am your autonomous coding agent. How can I help?' },
-  ]);
+  const [messages, setMessages] = useState(() => readInitialMessages());
   const [reasoning, setReasoning] = useState('');
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(() => readText(CHAT_INPUT_KEY, ''));
   const [streaming, setStreaming] = useState(false);
   const bottomRef = useRef(null);
   const abortRef = useRef(null);
@@ -104,6 +133,22 @@ export default function Chat() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    const safeMessages = messages
+      .filter((msg) => msg && typeof msg === 'object')
+      .map((msg) => {
+        if (msg.role === 'tool') {
+          return { role: 'tool', tool: msg.tool, done: msg.done };
+        }
+        return { role: msg.role, text: msg.text };
+      });
+    writeJson(CHAT_MESSAGES_KEY, safeMessages);
+  }, [messages]);
+
+  useEffect(() => {
+    writeText(CHAT_INPUT_KEY, input);
+  }, [input]);
 
   async function handleSend(e) {
     e.preventDefault();

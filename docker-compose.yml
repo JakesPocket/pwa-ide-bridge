@@ -12,7 +12,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - VITE_SERVER_URL=${VITE_SERVER_URL:-http://host.docker.internal:5173}
+      - VITE_SERVER_URL=${VITE_SERVER_URL:-http://host.docker.internal:3000}
     restart: unless-stopped
 
 # The backend runs from the PocketIDE-Server repository as a separate service.

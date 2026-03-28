@@ -1,14 +1,29 @@
-// Icons as tiny inline components so there are no extra dependencies
-function IconMenu() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-      strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6" aria-hidden="true">
-      <line x1="3" y1="6"  x2="21" y2="6"  />
-      <line x1="3" y1="12" x2="21" y2="12" />
-      <line x1="3" y1="18" x2="21" y2="18" />
-    </svg>
+import { useEffect, useState } from 'react';
+
+// Tracks the visual viewport height so the layout shrinks when the on-screen
+// keyboard appears, keeping the nav bar pinned just above the keyboard.
+function useVisualViewportHeight() {
+  const [height, setHeight] = useState(
+    () => (typeof window !== 'undefined' ? (window.visualViewport?.height ?? window.innerHeight) : 0),
   );
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setHeight(vv.height);
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, []);
+
+  return height;
 }
+
+// Icons as tiny inline components so there are no extra dependencies
+
 
 function IconLayers() {
   return (
@@ -52,24 +67,47 @@ function IconChat() {
   );
 }
 
+function IconSettings() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
+    </svg>
+  );
+}
+
 const TAB_ITEMS = [
-  { id: 'extensions', label: 'Explorer' },
+  { id: 'extensions', label: 'Workspace' },
   { id: 'editor',     label: 'Editor'   },
-  { id: 'terminal',   label: 'Terminal' },
   { id: 'ai-chat',    label: 'AI Chat'  },
+  { id: 'terminal',   label: 'Terminal' },
+  { id: 'settings',   label: 'Settings' },
 ];
 
 function TabIcon({ id, isActive }) {
-  if (id === 'extensions') return isActive ? <IconMenu /> : <IconLayers />;
+  if (id === 'extensions') return <IconLayers />;
   if (id === 'editor')     return <IconFile />;
-  if (id === 'terminal')   return <IconTerminal />;
   if (id === 'ai-chat')    return <IconChat />;
+  if (id === 'terminal')   return <IconTerminal />;
+  if (id === 'settings')   return <IconSettings />;
   return null;
 }
 
 export default function Layout({ activeTab, onTabChange, children }) {
+  const vpHeight = useVisualViewportHeight();
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col overflow-hidden" style={{ height: `${vpHeight}px` }}>
+      {/* Top safe-area spacer — expands to the device's notch/Dynamic Island height,
+          zero on devices without one. Uses height (not padding) so no element's
+          own box size is affected. shrink-0 prevents flex from collapsing it. */}
+      <div
+        aria-hidden="true"
+        className="shrink-0 w-full"
+        style={{ height: 'env(safe-area-inset-top)' }}
+      />
+
       {/* Main content — leave room for the nav bar via padding so nothing hides under it */}
       <main className="flex-1 overflow-hidden">
         {children}
@@ -84,8 +122,6 @@ export default function Layout({ activeTab, onTabChange, children }) {
           backdropFilter: 'blur(20px) saturate(180%)',
           WebkitBackdropFilter: 'blur(20px) saturate(180%)',
           borderTop: '1px solid rgba(255,255,255,0.06)',
-          // Safe-area inset for iPhone notch / Dynamic Island
-          paddingBottom: 'env(safe-area-inset-bottom)',
         }}
         className="flex shrink-0"
       >
@@ -124,6 +160,19 @@ export default function Layout({ activeTab, onTabChange, children }) {
           );
         })}
       </nav>
+
+      {/* Safe-area spacer — extends nav background behind the home indicator.
+          height-only, never affects button sizing or any other element. */}
+      <div
+        aria-hidden="true"
+        className="shrink-0 w-full"
+        style={{
+          height: 'env(safe-area-inset-bottom)',
+          backgroundColor: 'rgba(13, 13, 15, 0.75)',
+          backdropFilter: 'blur(20px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        }}
+      />
     </div>
   );
 }

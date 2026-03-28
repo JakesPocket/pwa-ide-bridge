@@ -1,5 +1,5 @@
 const { io } = require('socket.io-client');
-const s = io('http://localhost:5173', { transports: ['websocket'], timeout: 5000 });
+const s = io('http://localhost:3000', { transports: ['websocket'], timeout: 5000 });
 let done = false;
 s.on('connect', () => {
   console.log('connected');

@@ -1,5 +1,5 @@
-const DEFAULT_LOCAL_SERVER = 'http://localhost:5173';
-const CODESPACE_SERVER_PORT = '5173';
+const DEFAULT_LOCAL_SERVER = 'http://localhost:3000';
+const BACKEND_SERVER_PORT = '3000';
 
 function inferCodespaceServerUrl() {
   if (typeof window === 'undefined') return null;
@@ -10,7 +10,7 @@ function inferCodespaceServerUrl() {
   if (!match) return null;
 
   const [, prefix, suffix] = match;
-  return `${protocol}//${prefix}-${CODESPACE_SERVER_PORT}${suffix}`;
+  return `${protocol}//${prefix}-${BACKEND_SERVER_PORT}${suffix}`;
 }
 
 function resolveServerBaseUrl() {
@@ -34,7 +34,7 @@ function resolveServerBaseUrl() {
   }
 
   // On LAN/mobile access (e.g. 10.x.x.x), target the same host on backend port.
-  return `${protocol}//${hostname}:${CODESPACE_SERVER_PORT}`;
+  return `${protocol}//${hostname}:${BACKEND_SERVER_PORT}`;
 }
 
 export const SERVER_BASE_URL = resolveServerBaseUrl();
