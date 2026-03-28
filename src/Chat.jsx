@@ -158,24 +158,38 @@ function ToolCallBubble({ tool, done, input, output }) {
         </button>
         {open && (
           <div className="px-3 pb-3 border-t border-vscode-border/60 bg-vscode-sidebar/40">
-            {inputText && (
-              <div className="pt-2">
-                <div className="text-[10px] uppercase tracking-wider text-vscode-text-muted mb-1">Input</div>
-                <pre className="whitespace-pre-wrap break-words text-[11px] text-vscode-text-muted leading-relaxed font-mono">{inputText}</pre>
-              </div>
-            )}
-            {outputText && (
-              <div className="pt-2">
-                <div className="text-[10px] uppercase tracking-wider text-vscode-text-muted mb-1">Result</div>
-                <pre className="whitespace-pre-wrap break-words text-[11px] text-vscode-text-muted leading-relaxed font-mono">{outputText}</pre>
-              </div>
-            )}
+            {inputText && <TruncatedPayload text={inputText} label="Input" />}
+            {outputText && <TruncatedPayload text={outputText} label="Result" />}
             {!inputText && !outputText && (
               <div className="pt-2 text-[11px] text-vscode-text-muted">No additional details for this step.</div>
             )}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+const PAYLOAD_PREVIEW_LIMIT = 2000;
+
+function TruncatedPayload({ text, label }) {
+  const [expanded, setExpanded] = useState(false);
+  const truncated = !expanded && text.length > PAYLOAD_PREVIEW_LIMIT;
+  return (
+    <div className="pt-2">
+      <div className="text-[10px] uppercase tracking-wider text-vscode-text-muted mb-1">{label}</div>
+      <pre className="whitespace-pre-wrap break-words text-[11px] text-vscode-text-muted leading-relaxed font-mono">
+        {truncated ? text.slice(0, PAYLOAD_PREVIEW_LIMIT) + '…' : text}
+      </pre>
+      {text.length > PAYLOAD_PREVIEW_LIMIT && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1 text-[10px] text-vscode-accent hover:underline"
+          style={{ background: 'none', border: 'none', outline: 'none', padding: 0, cursor: 'pointer' }}
+        >
+          {expanded ? 'Show less' : `Show ${text.length - PAYLOAD_PREVIEW_LIMIT} more chars`}
+        </button>
+      )}
     </div>
   );
 }
@@ -314,19 +328,14 @@ export default function Chat() {
   }, [pendingReviewPaths]);
 
   useEffect(() => {
-    if (!changesSummary.files.length && pendingReviewPaths.length) {
-      setPendingReviewPaths([]);
-      return;
-    }
-
-    if (!pendingReviewPaths.length) return;
-
-    const changedPaths = new Set(changesSummary.files.map((file) => file.path));
-    const next = pendingReviewPaths.filter((filePath) => changedPaths.has(filePath));
-    if (next.length !== pendingReviewPaths.length) {
-      setPendingReviewPaths(next);
-    }
-  }, [changesSummary.files, pendingReviewPaths]);
+    setPendingReviewPaths((prev) => {
+      if (!prev.length) return prev;
+      if (!changesSummary.files.length) return [];
+      const changedPaths = new Set(changesSummary.files.map((file) => file.path));
+      const next = prev.filter((filePath) => changedPaths.has(filePath));
+      return next.length !== prev.length ? next : prev;
+    });
+  }, [changesSummary.files]);
 
   async function handleSend(e) {
     e.preventDefault();
@@ -343,9 +352,9 @@ export default function Chat() {
     // Append user message
     setMessages((prev) => [...prev, { role: 'user', text: prompt }]);
 
-    // Reserve a slot for the streaming agent reply
-    const agentIdx = messages.length + 1; // after user msg
-    setMessages((prev) => [...prev, { role: 'agent', text: '', streaming: true }]);
+    // Reserve a slot for the streaming agent reply, identified by a stable id
+    const agentId = crypto.randomUUID();
+    setMessages((prev) => [...prev, { id: agentId, role: 'agent', text: '', streaming: true }]);
 
     const ctrl = new AbortController();
     abortRef.current = ctrl;
@@ -391,9 +400,9 @@ export default function Chat() {
             case 'delta':
               setMessages((prev) => {
                 const next = [...prev];
-                const target = next[agentIdx];
-                if (target?.role === 'agent') {
-                  next[agentIdx] = { ...target, text: target.text + event.content, streaming: true };
+                const i = next.findIndex((m) => m.id === agentId);
+                if (i !== -1 && next[i].role === 'agent') {
+                  next[i] = { ...next[i], text: next[i].text + event.content, streaming: true };
                 }
                 return next;
               });
@@ -424,9 +433,9 @@ export default function Chat() {
               // Replace streaming placeholder with final complete text
               setMessages((prev) => {
                 const next = [...prev];
-                const target = next[agentIdx];
-                if (target?.role === 'agent') {
-                  next[agentIdx] = { role: 'agent', text: event.content, streaming: false };
+                const i = next.findIndex((m) => m.id === agentId);
+                if (i !== -1 && next[i].role === 'agent') {
+                  next[i] = { id: agentId, role: 'agent', text: event.content, streaming: false };
                 }
                 return next;
               });
@@ -450,7 +459,8 @@ export default function Chat() {
       if (reasoningAcc) {
         setMessages((prev) => {
           const next = [...prev];
-          next.splice(agentIdx, 0, { role: 'reasoning', text: reasoningAcc });
+          const i = next.findIndex((m) => m.id === agentId);
+          if (i !== -1) next.splice(i, 0, { role: 'reasoning', text: reasoningAcc });
           return next;
         });
       }
@@ -458,21 +468,20 @@ export default function Chat() {
       // Finalise: strip streaming flag
       setMessages((prev) => {
         const next = [...prev];
-        const finalIdx = agentIdx + (reasoningAcc ? 1 : 0);
-        const target = next[finalIdx];
-        if (target?.role === 'agent') {
-          const text = typeof target.text === 'string' ? target.text.trim() : '';
+        const i = next.findIndex((m) => m.id === agentId);
+        if (i !== -1 && next[i].role === 'agent') {
+          const text = typeof next[i].text === 'string' ? next[i].text.trim() : '';
           if (!text) {
             if (sawServerError) {
-              next.splice(finalIdx, 1);
+              next.splice(i, 1);
             } else {
-              next[finalIdx] = {
+              next[i] = {
                 role: 'error',
                 text: 'No response content was returned by the agent. Check backend auth/token setup.',
               };
             }
           } else {
-            next[finalIdx] = { ...target, streaming: false };
+            next[i] = { ...next[i], streaming: false };
           }
         }
         return next;
@@ -497,7 +506,9 @@ export default function Chat() {
           touched.push(filePath);
         }
       }
-      setPendingReviewPaths(touched);
+      if (touched.length > 0) {
+        setPendingReviewPaths(touched);
+      }
     }
   }
 
@@ -508,7 +519,14 @@ export default function Chat() {
       const next = [...prev];
       const last = next[next.length - 1];
       if (last?.role === 'agent' && last.streaming) {
-        next[next.length - 1] = { ...last, streaming: false };
+        next[next.length - 1] = {
+          ...last,
+          streaming: false,
+          text: last.text ? last.text + '\n\n_(aborted)_' : '',
+        };
+        if (!next[next.length - 1].text) {
+          next.pop();
+        }
       }
       return next;
     });
