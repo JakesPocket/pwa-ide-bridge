@@ -201,7 +201,7 @@ function GitView() {
     );
   }
 
-  const { branch, ahead, behind, staged, unstaged, untracked } = gitStatus;
+  const { repoName, branch, ahead, behind, staged, unstaged, untracked } = gitStatus;
   const hasChanges = staged.length + unstaged.length + untracked.length > 0;
   const canCommit = staged.length > 0 && commitMsg.trim().length > 0;
 
@@ -217,6 +217,12 @@ function GitView() {
             <circle cx="6" cy="18" r="3" />
             <path d="M18 9a9 9 0 01-9 9" />
           </svg>
+          {repoName && (
+            <>
+              <span className="text-sm text-vscode-text-muted truncate shrink-0">{repoName}</span>
+              <span className="text-vscode-text-muted opacity-40 shrink-0">/</span>
+            </>
+          )}
           <span className="text-sm text-vscode-text truncate">{branch}</span>
           {ahead > 0 && <span className="text-[11px] text-green-400 shrink-0">↑{ahead}</span>}
           {behind > 0 && <span className="text-[11px] text-yellow-400 shrink-0">↓{behind}</span>}
