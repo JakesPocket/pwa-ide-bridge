@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { apiUrl } from './config/server';
 import { readJson, writeJson, readText, writeText } from './utils/persist';
 
@@ -126,8 +126,34 @@ export default function Chat() {
   const [reasoning, setReasoning] = useState('');
   const [input, setInput] = useState(() => readText(CHAT_INPUT_KEY, ''));
   const [streaming, setStreaming] = useState(false);
+  const [changesSummary, setChangesSummary] = useState({ totals: { files: 0, added: 0, removed: 0 }, files: [] });
+  const [changesOpen, setChangesOpen] = useState(false);
+  const [changesLoading, setChangesLoading] = useState(false);
   const bottomRef = useRef(null);
   const abortRef = useRef(null);
+
+  const fetchChangesSummary = useCallback(async () => {
+    setChangesLoading(true);
+    try {
+      const r = await fetch(apiUrl('/api/git/changes-summary'));
+      if (!r.ok) throw new Error(`Failed (${r.status})`);
+      const data = await r.json();
+      setChangesSummary({
+        totals: data?.totals || { files: 0, added: 0, removed: 0 },
+        files: Array.isArray(data?.files) ? data.files : [],
+      });
+    } catch (_) {
+      setChangesSummary({ totals: { files: 0, added: 0, removed: 0 }, files: [] });
+    } finally {
+      setChangesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchChangesSummary();
+    const timer = setInterval(fetchChangesSummary, 15000);
+    return () => clearInterval(timer);
+  }, [fetchChangesSummary]);
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -275,9 +301,18 @@ export default function Chat() {
       // Finalise: strip streaming flag
       setMessages((prev) => {
         const next = [...prev];
-        const target = next[agentIdx + (reasoningAcc ? 1 : 0)];
+        const finalIdx = agentIdx + (reasoningAcc ? 1 : 0);
+        const target = next[finalIdx];
         if (target?.role === 'agent') {
-          next[agentIdx + (reasoningAcc ? 1 : 0)] = { ...target, streaming: false };
+          const text = typeof target.text === 'string' ? target.text.trim() : '';
+          if (!text) {
+            next[finalIdx] = {
+              role: 'error',
+              text: 'No response content was returned by the agent. Check backend auth/token setup.',
+            };
+          } else {
+            next[finalIdx] = { ...target, streaming: false };
+          }
         }
         return next;
       });
@@ -292,6 +327,7 @@ export default function Chat() {
     } finally {
       setStreaming(false);
       abortRef.current = null;
+      fetchChangesSummary();
     }
   }
 
@@ -328,6 +364,54 @@ export default function Chat() {
           return null;
         })}
         <div ref={bottomRef} />
+      </div>
+
+      {/* Changed files strip */}
+      <div className="border-t border-vscode-border px-3 py-2" style={{ backgroundColor: 'var(--color-vscode-sidebar)' }}>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setChangesOpen((v) => !v)}
+            className="flex items-center gap-2 text-xs text-vscode-text-muted hover:text-vscode-text cursor-pointer"
+            style={{ background: 'none', border: 'none', outline: 'none' }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round"
+              className={`w-3 h-3 transition-transform ${changesOpen ? 'rotate-90' : ''}`}>
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+            <span>
+              Files changed: {changesSummary.totals.files}
+              <span className="ml-1 text-green-400">+{changesSummary.totals.added}</span>
+              <span className="ml-1 text-red-400">-{changesSummary.totals.removed}</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={fetchChangesSummary}
+            disabled={changesLoading}
+            className="ml-auto text-[11px] text-vscode-text-muted hover:text-vscode-text disabled:opacity-40"
+            style={{ background: 'none', border: 'none', outline: 'none' }}
+          >
+            {changesLoading ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
+
+        {changesOpen && (
+          <div className="mt-2 max-h-36 overflow-y-auto rounded border border-vscode-border bg-vscode-bg">
+            {changesSummary.files.length === 0 ? (
+              <p className="px-2.5 py-2 text-xs text-vscode-text-muted">No local changes.</p>
+            ) : (
+              changesSummary.files.map((file) => (
+                <div key={file.path} className="px-2.5 py-1.5 text-xs border-b border-vscode-border last:border-b-0 flex items-center gap-2">
+                  <span className="text-vscode-text truncate flex-1">{file.path}</span>
+                  <span className="text-green-400">+{file.added || 0}</span>
+                  <span className="text-red-400">-{file.removed || 0}</span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
       {/* Input bar */}

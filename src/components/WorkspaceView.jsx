@@ -178,6 +178,29 @@ function GitView() {
     await gitAction('/api/git/commit', { message: commitMsg });
     setCommitMsg('');
   }
+  async function handleGenerateCommitMessage() {
+    setBusy(true);
+    setActionMsg('');
+    try {
+      const r = await fetch(apiUrl('/api/git/generate-commit-message'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setActionMsg(data.error || `Failed (${r.status})`);
+        return;
+      }
+      if (typeof data.message === 'string' && data.message.trim()) {
+        setCommitMsg(data.message.trim());
+        setActionMsg(data.source === 'heuristic' ? 'Generated commit message.' : 'Generated commit message with AI.');
+      }
+    } catch (e) {
+      setActionMsg(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function handlePush() { await gitAction('/api/git/push'); }
   async function handlePull() { await gitAction('/api/git/pull'); }
 
@@ -207,6 +230,7 @@ function GitView() {
   const { repoName, branch, ahead, behind, staged, unstaged, untracked } = gitStatus;
   const hasChanges = staged.length + unstaged.length + untracked.length > 0;
   const canCommit = staged.length > 0 && commitMsg.trim().length > 0;
+  const canGenerateCommitMsg = staged.length > 0 && !busy;
   const hasMessage = commitMsg.trim().length > 0;
 
   return (
@@ -299,6 +323,18 @@ function GitView() {
                   <div>{canCommit ? 'ready' : 'blocked'}</div>
                 </div>
               </div>
+            </div>
+            <div className="flex justify-end mb-1">
+              <button
+                onClick={handleGenerateCommitMessage}
+                disabled={!canGenerateCommitMsg}
+                className="text-[11px] px-2.5 py-1 rounded border border-vscode-border
+                           text-vscode-text-muted hover:text-vscode-text hover:bg-vscode-sidebar-hover
+                           cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ background: 'transparent', outline: 'none' }}
+              >
+                Generate commit message
+              </button>
             </div>
             <textarea
               value={commitMsg}
