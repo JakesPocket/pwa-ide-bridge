@@ -199,10 +199,10 @@ function RepoGitPanel({ repo, isExpanded, onToggle }) {
   }, [repo.id]);
 
   useEffect(() => {
-    if (!isExpanded && gitStatus) return;
+    if (!isExpanded) return;
     fetchStatus();
     fetchBranches();
-  }, [isExpanded, gitStatus, fetchStatus, fetchBranches]);
+  }, [isExpanded, fetchStatus, fetchBranches]);
 
   async function gitAction(endpoint, body = {}) {
     setBusy(true);
@@ -514,6 +514,14 @@ function RepoGitPanel({ repo, isExpanded, onToggle }) {
                   <button onClick={() => switchBranch(pendingBranchSwitch.branch, 'force', pendingBranchSwitch.remote)} disabled={busy}
                     className="flex-1 py-1.5 rounded text-xs border border-vscode-border text-red-300" style={{ background: 'transparent', outline: 'none' }}>
                     Discard &amp; Switch
+                  </button>
+                  <button
+                    onClick={() => setPendingBranchSwitch(null)}
+                    disabled={busy}
+                    className="px-2 py-1.5 rounded text-xs border border-vscode-border text-vscode-text-muted hover:text-vscode-text disabled:opacity-40"
+                    style={{ background: 'transparent', outline: 'none' }}
+                  >
+                    Cancel
                   </button>
                 </div>
               </div>
