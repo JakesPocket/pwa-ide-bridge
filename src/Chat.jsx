@@ -20,6 +20,8 @@ function readInitialMessages() {
           role: 'tool',
           tool: typeof msg.tool === 'string' ? msg.tool : 'unknown',
           done: Boolean(msg.done),
+          input: msg.input ?? null,
+          output: msg.output ?? null,
         };
       }
       return {
@@ -35,8 +37,48 @@ function readInitialMessages() {
 // ── Message types ──────────────────────────────────────────────────────────
 // { role: 'user',   text: string }
 // { role: 'agent',  text: string, streaming?: bool }
-// { role: 'tool',   tool: string, done?: bool }
+// { role: 'tool',   tool: string, done?: bool, input?: unknown, output?: unknown }
 // { role: 'error',  text: string }
+
+function summarizeTool(tool, input) {
+  const labelMap = {
+    report_intent: 'Shared current intent',
+    bash: 'Ran command in terminal',
+    read_bash: 'Read terminal output',
+    apply_patch: 'Edited workspace files',
+    create_file: 'Created file',
+    read_file: 'Read file',
+    grep_search: 'Searched workspace text',
+    file_search: 'Searched workspace files',
+    semantic_search: 'Searched code semantically',
+  };
+
+  const base = labelMap[tool] || `Ran ${tool}`;
+  if (typeof input === 'string' && input.trim()) {
+    const compact = input.trim().replace(/\s+/g, ' ');
+    return compact.length > 70 ? `${base}: ${compact.slice(0, 67)}...` : `${base}: ${compact}`;
+  }
+  if (input && typeof input === 'object') {
+    if (typeof input.explanation === 'string' && input.explanation.trim()) {
+      return input.explanation.trim();
+    }
+    if (typeof input.command === 'string' && input.command.trim()) {
+      const compact = input.command.trim().replace(/\s+/g, ' ');
+      return compact.length > 70 ? `${base}: ${compact.slice(0, 67)}...` : `${base}: ${compact}`;
+    }
+  }
+  return base;
+}
+
+function formatToolPayload(value) {
+  if (value == null) return null;
+  if (typeof value === 'string') return value.trim() || null;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
 
 function UserBubble({ text }) {
   return (
@@ -64,28 +106,68 @@ function AgentBubble({ text, streaming }) {
   );
 }
 
-function ToolCallBubble({ tool, done }) {
+function ToolCallBubble({ tool, done, input, output }) {
+  const [open, setOpen] = useState(!done);
+
+  useEffect(() => {
+    if (done) setOpen(false);
+  }, [done]);
+
+  const summary = summarizeTool(tool, input);
+  const inputText = formatToolPayload(input);
+  const outputText = formatToolPayload(output);
+
   return (
     <div className="flex justify-start">
-      <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs
-                      text-vscode-text-muted border border-vscode-border
-                      bg-vscode-bg max-w-[85%]">
-        {!done ? (
-          <svg className="w-3.5 h-3.5 shrink-0 animate-spin text-vscode-accent"
-            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M21 12a9 9 0 11-6.22-8.56" strokeLinecap="round" />
+      <div className="max-w-[90%] rounded-xl text-xs text-vscode-text-muted border border-vscode-border bg-vscode-bg overflow-hidden">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="w-full flex items-start gap-2 px-3 py-2 text-left"
+          style={{ background: 'none', border: 'none', outline: 'none' }}
+        >
+          {!done ? (
+            <svg className="w-3.5 h-3.5 shrink-0 animate-spin text-vscode-accent mt-0.5"
+              viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M21 12a9 9 0 11-6.22-8.56" strokeLinecap="round" />
+            </svg>
+          ) : (
+            <svg className="w-3.5 h-3.5 shrink-0 text-green-500 mt-0.5"
+              viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+              strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="text-vscode-text">{summary}</div>
+            <div className="mt-0.5 text-[11px] text-vscode-text-muted">
+              {done ? 'Finished' : 'Running'} • {tool}
+            </div>
+          </div>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            strokeLinecap="round" strokeLinejoin="round"
+            className={`w-3.5 h-3.5 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}>
+            <polyline points="6 9 12 15 18 9" />
           </svg>
-        ) : (
-          <svg className="w-3.5 h-3.5 shrink-0 text-green-500"
-            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-            strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
+        </button>
+        {open && (
+          <div className="px-3 pb-3 border-t border-vscode-border/60 bg-vscode-sidebar/40">
+            {inputText && (
+              <div className="pt-2">
+                <div className="text-[10px] uppercase tracking-wider text-vscode-text-muted mb-1">Input</div>
+                <pre className="whitespace-pre-wrap break-words text-[11px] text-vscode-text-muted leading-relaxed font-mono">{inputText}</pre>
+              </div>
+            )}
+            {outputText && (
+              <div className="pt-2">
+                <div className="text-[10px] uppercase tracking-wider text-vscode-text-muted mb-1">Result</div>
+                <pre className="whitespace-pre-wrap break-words text-[11px] text-vscode-text-muted leading-relaxed font-mono">{outputText}</pre>
+              </div>
+            )}
+            {!inputText && !outputText && (
+              <div className="pt-2 text-[11px] text-vscode-text-muted">No additional details for this step.</div>
+            )}
+          </div>
         )}
-        <span>
-          {done ? 'Done: ' : 'Agent is running: '}
-          <span className="font-mono text-vscode-text">{tool}</span>
-        </span>
       </div>
     </div>
   );
@@ -209,7 +291,7 @@ export default function Chat() {
       .filter((msg) => msg && typeof msg === 'object')
       .map((msg) => {
         if (msg.role === 'tool') {
-          return { role: 'tool', tool: msg.tool, done: msg.done };
+          return { role: 'tool', tool: msg.tool, done: msg.done, input: msg.input ?? null, output: msg.output ?? null };
         }
         return { role: msg.role, text: msg.text };
       });
@@ -294,7 +376,7 @@ export default function Chat() {
             case 'tool_call':
               setMessages((prev) => [
                 ...prev,
-                { role: 'tool', tool: event.tool, done: false },
+                { role: 'tool', tool: event.tool, input: event.input ?? null, output: null, done: false },
               ]);
               break;
 
@@ -304,7 +386,7 @@ export default function Chat() {
                 // Mark the last matching tool bubble as done
                 for (let i = next.length - 1; i >= 0; i--) {
                   if (next[i].role === 'tool' && next[i].tool === event.tool && !next[i].done) {
-                    next[i] = { ...next[i], done: true };
+                    next[i] = { ...next[i], done: true, output: event.output ?? null };
                     break;
                   }
                 }
@@ -418,7 +500,7 @@ export default function Chat() {
         {messages.map((msg, idx) => {
           if (msg.role === 'user')      return <UserBubble    key={idx} text={msg.text} />;
           if (msg.role === 'agent')     return <AgentBubble   key={idx} text={msg.text} streaming={msg.streaming} />;
-          if (msg.role === 'tool')      return <ToolCallBubble key={idx} tool={msg.tool} done={msg.done} />;
+          if (msg.role === 'tool')      return <ToolCallBubble key={idx} tool={msg.tool} done={msg.done} input={msg.input} output={msg.output} />;
           if (msg.role === 'reasoning') return <ReasoningBubble key={idx} text={msg.text} />;
           if (msg.role === 'error')     return (
             <div key={idx} className="flex justify-start">
@@ -532,7 +614,7 @@ export default function Chat() {
               handleSend(e);
             }
           }}
-          placeholder="Message the agent… (Enter to send, Shift+Enter for newline)"
+          placeholder="What are you gonna do?"
           disabled={streaming}
           rows={1}
           className="flex-1 resize-none bg-vscode-sidebar text-vscode-text
