@@ -6,8 +6,10 @@ const CHAT_MESSAGES_KEY = 'pocketide.chat.messages.v1';
 const CHAT_INPUT_KEY = 'pocketide.chat.input.v1';
 const CHAT_PENDING_REVIEW_KEY = 'pocketide.chat.pendingReviewPaths.v1';
 const CHAT_UI_AGENT_KEY = 'pocketide.chat.ui.agent.v1';
+const CHAT_UI_PROVIDER_KEY = 'pocketide.chat.ui.model.v1';
 const CHAT_UI_EXEC_MODE_KEY = 'pocketide.chat.ui.execMode.v1';
 const CHAT_TURN_AI_MODES_KEY = 'pocketide.chat.turnAiModes.v1';
+const CHAT_TURN_PROVIDERS_KEY = 'pocketide.chat.turnProviders.v1';
 const CHAT_CLOUD_JOBS_KEY = 'pocketide.chat.cloudJobs.v1';
 const CHAT_VIEW_TAB_KEY = 'pocketide.chat.viewTab.v1';
 
@@ -18,12 +20,25 @@ function normalizeMode(value) {
 
 function normalizeTab(value) {
   const tab = String(value || '').toLowerCase().trim();
-  return tab === 'tasks' ? 'tasks' : 'chat';
+  return tab === 'tasks' || tab === 'cloud' ? 'cloud' : 'chat';
 }
 
 function normalizeExecutionMode(value) {
   const mode = String(value || '').toLowerCase().trim();
-  return mode === 'cloud' ? 'cloud' : 'local';
+  return mode === 'cloud' ? 'cloud' : 'chat';
+}
+
+function normalizeProvider(value) {
+  const provider = String(value || '').toLowerCase().trim();
+  if (provider === 'codex' || provider === 'local') return provider;
+  return 'copilot';
+}
+
+function providerDisplayName(value) {
+  const provider = normalizeProvider(value);
+  if (provider === 'codex') return 'Codex';
+  if (provider === 'local') return 'Local';
+  return 'Copilot';
 }
 
 function createMessageId() {
@@ -54,6 +69,7 @@ function normalizeStoredMessage(msg) {
       turnId: typeof msg.turnId === 'string' ? msg.turnId : null,
       role: msg.role,
       text: typeof msg.text === 'string' ? msg.text : '',
+      provider: normalizeProvider(msg.provider),
       aiMode: normalizeMode(msg.aiMode),
       options: Array.isArray(msg.options) ? msg.options : null,
       selectedMode: normalizeMode(msg.selectedMode),
@@ -112,6 +128,32 @@ function readInitialTurnAiModes() {
   return persisted;
 }
 
+function readInitialTurnProviders() {
+  const rawMap = readJson(CHAT_TURN_PROVIDERS_KEY, {});
+  const persisted = {};
+
+  if (rawMap && typeof rawMap === 'object') {
+    for (const [turnId, provider] of Object.entries(rawMap)) {
+      const normalized = normalizeProvider(provider);
+      if (turnId) persisted[turnId] = normalized;
+    }
+  }
+
+  const storedMessages = readJson(CHAT_MESSAGES_KEY, []);
+  if (Array.isArray(storedMessages)) {
+    for (const msg of storedMessages) {
+      if (!msg || typeof msg !== 'object') continue;
+      const turnId = typeof msg.turnId === 'string' ? msg.turnId : null;
+      const provider = normalizeProvider(msg.provider);
+      if (turnId && provider && !persisted[turnId]) {
+        persisted[turnId] = provider;
+      }
+    }
+  }
+
+  return persisted;
+}
+
 function normalizeCloudJob(job) {
   if (!job || typeof job !== 'object') return null;
   const jobId = typeof job.jobId === 'string' && job.jobId ? job.jobId : null;
@@ -119,6 +161,7 @@ function normalizeCloudJob(job) {
 
   return {
     jobId,
+    provider: normalizeProvider(job.provider || 'copilot'),
     status: typeof job.status === 'string' ? job.status : 'queued',
     aiMode: normalizeMode(job.aiMode) || 'cloud',
     message: typeof job.message === 'string' ? job.message : '',
@@ -627,7 +670,7 @@ function TurnToolTimeline({ tools }) {
   );
 }
 
-function TurnResponseGroup({ messages, aiMode = 'agent', longPressHandlers, onContinue }) {
+function TurnResponseGroup({ messages, aiMode = 'agent', provider = 'copilot', longPressHandlers, onContinue }) {
   const orderedMessages = aiMode === 'plan'
     ? messages.filter((m) => m.role !== 'reasoning' && m.role !== 'tool')
     : messages;
@@ -649,7 +692,7 @@ function TurnResponseGroup({ messages, aiMode = 'agent', longPressHandlers, onCo
     <div className="flex justify-start" {...(longPressHandlers || {})}>
       <div className="max-w-[96%] sm:max-w-[94%] min-w-0 rounded-xl bg-vscode-sidebar/40 p-2 sm:p-2.5" style={{ border: `1px solid ${modeColors[aiMode] || modeColors.agent}80` }}>
         <div className="text-[10px] uppercase tracking-wider text-vscode-text-muted mb-1 flex items-center gap-2">
-          <span>Copilot</span>
+          <span>{providerDisplayName(provider)}</span>
           <span
             style={{
               fontSize: '9px',
@@ -755,7 +798,7 @@ function buildRenderItems(messages) {
   return items;
 }
 
-export default function ChatView({ onOpenDiffFiles }) {
+export default function AgentView({ onOpenDiffFiles }) {
   const [messages, setMessages] = useState(() => readInitialMessages());
   const [reasoning, setReasoning] = useState('');
   const [input, setInput] = useState(() => readText(CHAT_INPUT_KEY, ''));
@@ -775,6 +818,7 @@ export default function ChatView({ onOpenDiffFiles }) {
   const [quietStage, setQuietStage] = useState('thinking');
   const [aiMode, setAiMode] = useState(() => readText(CHAT_UI_AGENT_KEY, 'agent'));
   const [turnAiModes, setTurnAiModes] = useState(readInitialTurnAiModes);
+  const [turnProviders, setTurnProviders] = useState(readInitialTurnProviders);
   const [contextMenu, setContextMenu] = useState(null);
   const bottomRef = useRef(null);
   const scrollRef = useRef(null);
@@ -1077,6 +1121,7 @@ export default function ChatView({ onOpenDiffFiles }) {
           turnId: msg.turnId,
           role: msg.role,
           text: msg.text,
+          provider: normalizeProvider(msg.provider),
           aiMode: normalizeMode(msg.aiMode),
           isTimeout: msg.isTimeout || false,
         };
@@ -1087,6 +1132,10 @@ export default function ChatView({ onOpenDiffFiles }) {
   useEffect(() => {
     writeJson(CHAT_TURN_AI_MODES_KEY, turnAiModes);
   }, [turnAiModes]);
+
+  useEffect(() => {
+    writeJson(CHAT_TURN_PROVIDERS_KEY, turnProviders);
+  }, [turnProviders]);
 
   useEffect(() => () => {
     if (submitScrollTimerRef.current) {
@@ -1183,7 +1232,8 @@ export default function ChatView({ onOpenDiffFiles }) {
     if (!prompt || streaming) return;
 
     const requestAiMode = normalizeMode(readText(CHAT_UI_AGENT_KEY, 'agent')) || 'agent';
-    const requestExecutionMode = normalizeExecutionMode(readText(CHAT_UI_EXEC_MODE_KEY, 'Local'));
+    const requestProvider = normalizeProvider(readText(CHAT_UI_PROVIDER_KEY, 'Copilot'));
+    const requestExecutionMode = normalizeExecutionMode(readText(CHAT_UI_EXEC_MODE_KEY, 'Chat'));
     const runAsCloud = requestExecutionMode === 'cloud' || requestAiMode === 'cloud';
     const turnId = createMessageId();
     const latestPlanText = getLatestPlanResponseText(messages, turnAiModes);
@@ -1194,23 +1244,24 @@ export default function ChatView({ onOpenDiffFiles }) {
       setInput('');
       setReasoning('');
       setTurnAiModes((prev) => ({ ...prev, [turnId]: requestAiMode }));
+      setTurnProviders((prev) => ({ ...prev, [turnId]: requestProvider }));
       setMessages((prev) => [...prev, { id: createMessageId(), turnId, role: 'user', text: prompt, aiMode: requestAiMode }]);
       scheduleDelayedScrollToBottom(120);
 
       try {
-        const created = await createCloudJob(outgoingPrompt, turnId);
+        const created = await createCloudJob(outgoingPrompt, turnId, requestProvider);
         setMessages((prev) => [
           ...prev,
           {
             id: createMessageId(),
             turnId,
             role: 'agent',
-            text: `Started cloud task ${created.jobId}. You can monitor and cancel it from the Tasks tab.`,
+            text: `Started ${providerDisplayName(requestProvider)} cloud task ${created.jobId}. You can monitor and cancel it from the Cloud tab.`,
             aiMode: requestAiMode,
             streaming: false,
           },
         ]);
-        setViewTab('tasks');
+        setViewTab('cloud');
       } catch (err) {
         setMessages((prev) => [
           ...prev,
@@ -1259,10 +1310,11 @@ export default function ChatView({ onOpenDiffFiles }) {
 
     try {
       setTurnAiModes((prev) => ({ ...prev, [turnId]: requestAiMode }));
+      setTurnProviders((prev) => ({ ...prev, [turnId]: requestProvider }));
       const res = await fetch(apiUrl('/api/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: outgoingPrompt, aiMode: requestAiMode }),
+        body: JSON.stringify({ message: outgoingPrompt, aiMode: requestAiMode, provider: requestProvider }),
         signal: ctrl.signal,
       });
 
@@ -1698,7 +1750,7 @@ export default function ChatView({ onOpenDiffFiles }) {
   }
 
   function formatCloudStatusMessage(job) {
-    const label = `Cloud task ${job.jobId}`;
+    const label = `${providerDisplayName(job.provider)} cloud task ${job.jobId}`;
     switch (job.status) {
       case 'queued':
         return `${label} queued.`;
@@ -1733,6 +1785,14 @@ export default function ChatView({ onOpenDiffFiles }) {
     const terminalUpdates = updates.filter((job) => terminal.has(job.status));
     if (!terminalUpdates.length) return;
 
+    const providerByTurn = {};
+    for (const job of terminalUpdates) {
+      if (job.turnId) providerByTurn[job.turnId] = normalizeProvider(job.provider || 'copilot');
+    }
+    if (Object.keys(providerByTurn).length > 0) {
+      setTurnProviders((prevProviders) => ({ ...prevProviders, ...providerByTurn }));
+    }
+
     setMessages((prev) => {
       const next = [...prev];
       for (const job of terminalUpdates) {
@@ -1741,6 +1801,7 @@ export default function ChatView({ onOpenDiffFiles }) {
           turnId: job.turnId,
           role: job.status === 'failed' ? 'error' : 'agent',
           text: formatCloudStatusMessage(job),
+          provider: normalizeProvider(job.provider || 'copilot'),
           aiMode: 'cloud',
         });
       }
@@ -1771,11 +1832,11 @@ export default function ChatView({ onOpenDiffFiles }) {
     return () => clearInterval(id);
   }, [fetchCloudJobs]);
 
-  async function createCloudJob(message, turnId) {
+  async function createCloudJob(message, turnId, provider) {
     const r = await fetch(apiUrl('/api/jobs'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, aiMode: 'cloud', turnId }),
+      body: JSON.stringify({ message, aiMode: 'cloud', turnId, provider }),
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
@@ -1868,15 +1929,15 @@ export default function ChatView({ onOpenDiffFiles }) {
           </button>
           <button
             type="button"
-            onClick={() => setViewTab('tasks')}
+            onClick={() => setViewTab('cloud')}
             className="px-2.5 py-1 rounded-md text-xs"
             style={{
               border: '1px solid var(--color-vscode-border)',
-              background: viewTab === 'tasks' ? 'var(--color-vscode-sidebar)' : 'transparent',
+              background: viewTab === 'cloud' ? 'var(--color-vscode-sidebar)' : 'transparent',
               color: 'var(--color-vscode-text)',
             }}
           >
-            Tasks ({cloudJobs.length})
+            Cloud ({cloudJobs.length})
           </button>
         </div>
 
@@ -1913,6 +1974,7 @@ export default function ChatView({ onOpenDiffFiles }) {
                 key={item.key}
                 messages={item.messages}
                 aiMode={mode}
+                provider={turnId ? (turnProviders[turnId] || 'copilot') : 'copilot'}
                 longPressHandlers={buildLongPressHandlers({
                   text: responseText,
                   allowRetry: false,
@@ -1946,7 +2008,7 @@ export default function ChatView({ onOpenDiffFiles }) {
         <div className="h-[calc(100%-37px)] overflow-x-hidden overflow-y-auto overscroll-y-contain p-3 sm:p-4">
           {sortedCloudJobs.length === 0 ? (
             <div className="rounded-lg border border-vscode-border bg-vscode-sidebar/40 px-3 py-2 text-sm text-vscode-text-muted">
-              No cloud tasks yet. Set Execution Mode to Cloud and send a prompt to queue a background task.
+              No cloud runs yet. Set Execution to Cloud and send a prompt to queue a background run.
             </div>
           ) : (
             <div className="flex flex-col gap-2">
@@ -1963,6 +2025,9 @@ export default function ChatView({ onOpenDiffFiles }) {
                   <div key={job.jobId} className="rounded-lg border border-vscode-border bg-vscode-sidebar/40 px-3 py-2">
                     <div className="flex items-center gap-2 text-xs text-vscode-text-muted">
                       <span className="inline-block w-2 h-2 rounded-full" style={{ background: statusColor }} />
+                      <span className="px-1.5 py-0.5 rounded border border-vscode-border/70 text-[10px] uppercase">
+                        {providerDisplayName(job.provider)}
+                      </span>
                       <span className="uppercase">{job.status}</span>
                       <span className="ml-auto">{job.jobId}</span>
                     </div>

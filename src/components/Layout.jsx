@@ -3,42 +3,30 @@ import { useEffect, useRef, useState } from 'react';
 // Keep layout height fixed to window.innerHeight so keyboard open/close does
 // not apply keyboard-based viewport padding behavior.
 function useAppViewportHeight() {
-  // Track the largest visualViewport.height ever seen as the stable "full" height.
-  // window.innerHeight itself can fluctuate on iOS when the keyboard opens, making
-  // it an unreliable reference for keyboard-open detection.
-  const maxVvHeightRef = useRef(0);
+  // Track a baseline visual viewport height for keyboard-open detection.
+  const baselineVvHeightRef = useRef(0);
 
   function resolveViewportMetrics() {
     const vv = window.visualViewport;
     if (!vv) {
-      // visualViewport is unavailable (should never happen in any supported browser).
-      // screen.height is a static physical-screen measurement unaffected by keyboard or chrome.
+      const fallbackHeight = Math.max(0, Math.round(window.innerHeight || 0));
       return {
-        height: Math.round(screen.height),
+        height: fallbackHeight,
         keyboardOpen: false,
       };
     }
 
     const visible = Math.max(0, Math.round(vv.height));
-    // offsetTop is how far the visual viewport has scrolled from the layout viewport top.
-    // On iOS, opening the keyboard can produce a non-zero offsetTop, so we must add it
-    // to the height so the layout fills from y=0 all the way to the keyboard top.
-    const offsetTop = Math.max(0, Math.round(vv.offsetTop ?? 0));
-
-    // Always ratchet up so the reference never shrinks due to keyboard.
-    if (visible > maxVvHeightRef.current) {
-      maxVvHeightRef.current = visible;
+    if (visible > baselineVvHeightRef.current) {
+      baselineVvHeightRef.current = visible;
     }
+    const baseline = baselineVvHeightRef.current || visible;
+    const keyboardOpen = visible < baseline - 120;
 
-    // vv is guaranteed non-null here. On first call the ratchet is 0, so fall back
-    // to the current visual viewport height (keyboard is not open yet at that point).
-    const fullHeight = maxVvHeightRef.current || Math.round(vv.height);
-    const keyboardOpen = visible < fullHeight - 120;
-
-    // When the keyboard is open, include offsetTop so the shell extends from the very
-    // top of the page down to exactly where the keyboard begins — no gap.
+    // Always use the actual current visual viewport height so the shell shrinks with
+    // the keyboard instead of preserving a stale full-screen layout box.
     return {
-      height: keyboardOpen ? visible + offsetTop : fullHeight,
+      height: visible,
       keyboardOpen,
     };
   }
