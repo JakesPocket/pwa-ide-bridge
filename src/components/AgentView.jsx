@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { apiUrl } from './config/server';
-import { readJson, writeJson, readText, writeText } from './utils/persist';
-import { preventScrollOnFocus } from './utils/preventScrollOnFocus';
+import { apiUrl } from '../config/server';
+import { readJson, writeJson, readText, writeText } from '../utils/persist';
+import { preventScrollOnFocus } from '../utils/preventScrollOnFocus';
 
 const REQUEST_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 

@@ -3,7 +3,7 @@ import Layout from './components/Layout';
 import WorkspaceView from './components/WorkspaceView';
 import EditorView from './components/EditorView';
 import TerminalView from './components/TerminalView';
-import AgentView from './AgentView';
+import AgentView from './components/AgentView';
 import { apiUrl } from './config/server';
 import { readJson, writeJson } from './utils/persist';
 import SettingsView from './components/SettingsView';

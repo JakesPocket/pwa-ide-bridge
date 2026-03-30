@@ -15,6 +15,8 @@
 
 :root {
   --app-vh: 100dvh;
+  /* Extra pixels below 100dvh to the physical screen bottom (iOS home indicator zone). */
+  --below-viewport-px: 50px;
 }
 
 *,
@@ -57,9 +59,10 @@ html {
 html,
 #root {
   width: 100%;
-  min-height: var(--app-vh, 100dvh);
-  height: var(--app-vh, 100dvh);
-  max-height: var(--app-vh, 100dvh);
+  /* Extends #root below 100dvh so the nav bar can dip into the iOS home indicator zone. */
+  min-height: calc(var(--app-vh, 100dvh) + var(--below-viewport-px, 0px));
+  height: calc(var(--app-vh, 100dvh) + var(--below-viewport-px, 0px));
+  max-height: calc(var(--app-vh, 100dvh) + var(--below-viewport-px, 0px));
   overflow: hidden !important;
   overscroll-behavior: none !important;
   -webkit-overscroll-behavior: none !important;
@@ -71,15 +74,31 @@ html,
   left: 0;
   right: 0;
   padding-top: 0px;
-  min-height: var(--app-vh, 100dvh);
-  height: var(--app-vh, 100dvh);
-  max-height: var(--app-vh, 100dvh);
+  min-height: calc(var(--app-vh, 100dvh) + var(--below-viewport-px, 0px));
+  height: calc(var(--app-vh, 100dvh) + var(--below-viewport-px, 0px));
+  max-height: calc(var(--app-vh, 100dvh) + var(--below-viewport-px, 0px));
   display: flex;
   flex-direction: column;
   overflow: hidden;
   overscroll-behavior: none;
   overscroll-behavior-y: none;
 }
+
+/* ── DEBUG: viewport boundary outline ───────────────────────────────────────
+   Fixed overlay that traces the exact visual viewport edges.
+   Remove this block when done debugging.                                     */
+html::after {
+  content: '';
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw;
+  height: 100dvh;
+  border: 3px solid red;
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 99999;
+}
+/* ─────────────────────────────────────────────────────────────────────────── */
 
 /* Hide scrollbars on tab bars while keeping scroll */
 .no-scrollbar::-webkit-scrollbar {

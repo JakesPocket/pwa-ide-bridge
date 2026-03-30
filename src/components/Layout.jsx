@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 
 // ─── Nav bar spacing ──────────────────────────────────────────────────────────
 // Tweak these to adjust gaps around the floating nav bar.
-const NAV_TOP_GAP_PX = 8;       // gap between content area and top of nav bar
-const NAV_BOTTOM_GAP_PX = 20;   // space below nav bar when keyboard is closed (0 when open)
-const NAV_SIDE_MARGIN_PX = 16;  // left/right margin that makes the nav bar "float"
+const NAV_TOP_GAP_PX = 8;             // gap between content area and top of nav bar
+const NAV_BOTTOM_GAP_PX = 20;         // space below nav bar when keyboard is closed (0 when open)
+const NAV_SIDE_MARGIN_PX = 16;        // left/right margin that makes the nav bar "float"
+const NAV_SAFE_AREA_EXTEND_PX = 0;   // how far the nav bar dips below 100dvh into the iOS safe area
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Keep layout height fixed to window.innerHeight so keyboard open/close does
@@ -212,7 +213,6 @@ export default function Layout({ activeTab, onTabChange, children }) {
   const layoutRef = useRef(null);
   const touchStartYRef = useRef(null);
   const navBottomOffsetPx = keyboardOpen ? 0 : NAV_BOTTOM_GAP_PX;
-  const topSafeExtraPx = 0;
   const activeTabIndex = Math.max(0, TAB_ITEMS.findIndex((tab) => tab.id === activeTab));
 
   function findScrollableAncestor(startNode, boundaryNode) {
@@ -293,13 +293,13 @@ export default function Layout({ activeTab, onTabChange, children }) {
   return (
     <div
       ref={layoutRef}
-      className="flex min-h-0 flex-col overflow-hidden"
+      className="flex min-h-0 flex-col"
       style={{
         minHeight: 'var(--app-vh, 100dvh)',
         height: 'var(--app-vh, 100dvh)',
         maxHeight: 'var(--app-vh, 100dvh)',
-        paddingTop: `calc(env(safe-area-inset-top, 0px) + ${topSafeExtraPx}px)`,
-        overflow: 'hidden',
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        overflow: 'visible',
         overscrollBehavior: 'none',
         WebkitOverflowScrolling: 'touch',
         borderTop: '1px solid white',
@@ -338,7 +338,7 @@ export default function Layout({ activeTab, onTabChange, children }) {
           marginLeft: NAV_SIDE_MARGIN_PX,
           marginRight: NAV_SIDE_MARGIN_PX,
           marginTop: NAV_TOP_GAP_PX,
-          marginBottom: `${navBottomOffsetPx}px`,
+          marginBottom: `${navBottomOffsetPx - NAV_SAFE_AREA_EXTEND_PX}px`,
           width: `calc(100% - ${NAV_SIDE_MARGIN_PX * 2}px)`,
         }}
       >
