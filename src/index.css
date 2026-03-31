@@ -84,22 +84,6 @@ html,
   overscroll-behavior-y: none;
 }
 
-/* ── DEBUG: viewport boundary outline ───────────────────────────────────────
-   Fixed overlay that traces the exact visual viewport edges.
-   Remove this block when done debugging.                                     */
-html::after {
-  content: '';
-  position: fixed;
-  top: 0; left: 0;
-  width: 100vw;
-  height: 100dvh;
-  border: 3px solid red;
-  box-sizing: border-box;
-  pointer-events: none;
-  z-index: 99999;
-}
-/* ─────────────────────────────────────────────────────────────────────────── */
-
 /* Hide scrollbars on tab bars while keeping scroll */
 .no-scrollbar::-webkit-scrollbar {
   display: none;

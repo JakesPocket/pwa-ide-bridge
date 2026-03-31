@@ -21,6 +21,22 @@ const SESSION_KEYS = [
 ];
 const VALID_TABS = new Set(['extensions', 'editor', 'ai-chat', 'terminal', 'settings']);
 
+function summarizePatchCounts(patchText) {
+  if (!patchText || typeof patchText !== 'string') {
+    return { added: 0, removed: 0 };
+  }
+
+  let added = 0;
+  let removed = 0;
+  for (const line of patchText.split('\n')) {
+    if (line.startsWith('+++') || line.startsWith('---')) continue;
+    if (line.startsWith('+')) added += 1;
+    else if (line.startsWith('-')) removed += 1;
+  }
+
+  return { added, removed };
+}
+
 function clearPersistedSession(storage) {
   for (const key of SESSION_KEYS) {
     storage.removeItem(key);
@@ -199,12 +215,16 @@ function App() {
       .filter((f) => f && typeof f.path === 'string' && f.path.trim())
       .map((f) => {
         const path = f.path;
+        const patch = typeof f.patch === 'string' ? f.patch : '';
+        const fallback = summarizePatchCounts(patch);
+        const countedAdded = Number.isFinite(f.added) ? f.added : 0;
+        const countedRemoved = Number.isFinite(f.removed) ? f.removed : 0;
         return {
           path,
           name: path.split('/').pop() || path,
-          diffAdded: Number.isFinite(f.added) ? f.added : 0,
-          diffRemoved: Number.isFinite(f.removed) ? f.removed : 0,
-          patch: typeof f.patch === 'string' ? f.patch : '',
+          diffAdded: countedAdded > 0 ? countedAdded : fallback.added,
+          diffRemoved: countedRemoved > 0 ? countedRemoved : fallback.removed,
+          patch,
         };
       });
 

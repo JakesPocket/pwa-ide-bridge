@@ -8,8 +8,10 @@ const NAV_SIDE_MARGIN_PX = 16;        // left/right margin that makes the nav ba
 const NAV_SAFE_AREA_EXTEND_PX = 0;   // how far the nav bar dips below 100dvh into the iOS safe area
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Keep layout height fixed to window.innerHeight so keyboard open/close does
-// not apply keyboard-based viewport padding behavior.
+// Keep the app shell pinned to the pre-keyboard viewport height. On iOS Safari,
+// shrinking a fixed shell to visualViewport.height while focusing an input causes
+// Safari's own focus-reveal scroll to stack with our relayout, which overshoots
+// more for controls that start lower on screen.
 function useAppViewportHeight() {
   // Track a baseline visual viewport height for keyboard-open detection.
   const baselineVvHeightRef = useRef(0);
@@ -31,10 +33,11 @@ function useAppViewportHeight() {
     const baseline = baselineVvHeightRef.current || visible;
     const keyboardOpen = visible < baseline - 120;
 
-    // Always use the actual current visual viewport height so the shell shrinks with
-    // the keyboard instead of preserving a stale full-screen layout box.
+    // Freeze the shell height while the keyboard is open. Safari already pans the
+    // visual viewport to reveal the focused control; shrinking the entire app at the
+    // same time causes focused inputs to jump much farther than necessary.
     return {
-      height: visible,
+      height: keyboardOpen ? baseline : visible,
       keyboardOpen,
     };
   }
@@ -212,7 +215,7 @@ export default function Layout({ activeTab, onTabChange, children }) {
   const { keyboardOpen } = useAppViewportHeight();
   const layoutRef = useRef(null);
   const touchStartYRef = useRef(null);
-  const navBottomOffsetPx = keyboardOpen ? 0 : NAV_BOTTOM_GAP_PX;
+  const navBottomOffsetPx = keyboardOpen ? 8 : NAV_BOTTOM_GAP_PX;
   const activeTabIndex = Math.max(0, TAB_ITEMS.findIndex((tab) => tab.id === activeTab));
 
   function findScrollableAncestor(startNode, boundaryNode) {

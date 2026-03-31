@@ -375,13 +375,16 @@ const MODE_BUBBLE_COLORS = {
 
 function UserBubble({ text, mode, longPressHandlers, attachments }) {
   const colors = MODE_BUBBLE_COLORS[mode];
+  const accent = colors?.border || 'var(--color-vscode-accent)';
   return (
     <div className="flex justify-end" {...(longPressHandlers || {})}>
       <div
-        className="max-w-[88%] px-3 py-2 rounded-xl text-sm text-vscode-text break-words leading-relaxed"
-        style={colors
-          ? { backgroundColor: colors.bg, border: `1px solid ${colors.border}` }
-          : { backgroundColor: 'var(--color-vscode-accent-20)', border: '1px solid var(--color-vscode-accent-40)' }}
+        className="max-w-[88%] px-3 py-2 rounded-lg text-sm text-vscode-text break-words leading-relaxed"
+        style={{
+          backgroundColor: 'rgba(255,255,255,0.03)',
+          border: '1px solid var(--color-vscode-border)',
+          borderRight: `2px solid ${accent}`,
+        }}
       >
         {attachments && attachments.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
@@ -455,7 +458,7 @@ function InlineText({ line }) {
 function TextBlock({ text }) {
   const lines = text.split('\n');
   return (
-    <div className="text-sm text-vscode-text leading-7 whitespace-pre-wrap break-words">
+    <div className="text-[13px] text-vscode-text leading-6 whitespace-pre-wrap break-words">
       {lines.map((line, idx) => {
         const trimmed = line.trim();
         if (!trimmed) return <div key={idx} className="h-2" />;
@@ -529,7 +532,7 @@ function AgentBubble({ text, streaming }) {
   return (
     <div className="flex justify-start">
       <div className="max-w-[92%] min-w-0">
-        <div className="pl-0">
+        <div className="pl-2 border-l border-vscode-border/60">
           {chunks.length === 0 ? <TextBlock text="" /> : chunks.map((chunk, idx) => (
             chunk.type === 'code'
               ? <CodeBlock key={idx} code={chunk.value} lang={chunk.lang} />
@@ -557,28 +560,20 @@ function ToolCallBubble({ tool, done, input, output }) {
 
   return (
     <div className="flex justify-start">
-      <div className="max-w-[90%] rounded-xl text-xs text-vscode-text-muted border border-vscode-border bg-vscode-bg overflow-hidden">
+      <div className="max-w-[90%] border-l border-vscode-border/60 pl-1 text-xs text-vscode-text-muted overflow-hidden">
         <button
           onClick={() => setOpen((v) => !v)}
-          className="w-full flex items-start gap-2 px-3 py-2 text-left"
+          className="w-full flex items-start gap-2 px-2.5 py-1.5 text-left"
           style={{ background: 'none', border: 'none', outline: 'none' }}
         >
-          {!done ? (
-            <svg className="w-3.5 h-3.5 shrink-0 animate-spin text-vscode-accent mt-0.5"
-              viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M21 12a9 9 0 11-6.22-8.56" strokeLinecap="round" />
-            </svg>
-          ) : (
-            <svg className="w-3.5 h-3.5 shrink-0 text-green-500 mt-0.5"
-              viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-              strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          )}
+          <span
+            className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 mt-1 ${done ? 'bg-emerald-500' : 'bg-vscode-accent animate-pulse'}`}
+            aria-hidden="true"
+          />
           <div className="min-w-0 flex-1">
-            <div className="text-vscode-text">{summary}</div>
-            <div className="mt-0.5 text-[11px] text-vscode-text-muted">
-              {done ? 'Finished' : 'Running'} • {tool}
+            <div className="text-[11px] text-vscode-text-muted">{summary}</div>
+            <div className="mt-0.5 text-[10px] uppercase tracking-wide text-vscode-text-muted/80">
+              {done ? 'done' : 'running'} • {tool}
             </div>
           </div>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -588,7 +583,7 @@ function ToolCallBubble({ tool, done, input, output }) {
           </svg>
         </button>
         {open && (
-          <div className="px-3 pb-3 border-t border-vscode-border/60 bg-vscode-sidebar/40">
+          <div className="px-3 pb-3 border-t border-vscode-border/40 bg-vscode-sidebar/20">
             {inputText && <TruncatedPayload text={inputText} label="Input" />}
             {outputText && <TruncatedPayload text={outputText} label="Result" />}
             {!inputText && !outputText && (
@@ -609,26 +604,19 @@ function ToolTimelineRow({ tool, done, input, output }) {
   const hasDetails = !!(inputText || outputText);
 
   return (
-    <div>
+    <div className="border-l border-vscode-border/50 ml-1">
       <button
         type="button"
         onClick={() => hasDetails && setOpen((v) => !v)}
         className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left ${hasDetails ? 'cursor-pointer' : 'cursor-default'}`}
         style={{ background: 'none', border: 'none', outline: 'none' }}
       >
-        {!done ? (
-          <svg className="w-3 h-3 shrink-0 animate-spin text-vscode-accent"
-            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M21 12a9 9 0 11-6.22-8.56" strokeLinecap="round" />
-          </svg>
-        ) : (
-          <svg className="w-3 h-3 shrink-0 text-green-500"
-            viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-            strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        )}
-        <span className="text-[11px] text-vscode-text truncate flex-1 min-w-0">{summary}</span>
+        <span
+          className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${done ? 'bg-emerald-500' : 'bg-vscode-accent animate-pulse'}`}
+          aria-hidden="true"
+        />
+        <span className="text-[11px] text-vscode-text-muted truncate flex-1 min-w-0">{summary}</span>
+        <span className="text-[10px] uppercase tracking-wide text-vscode-text-muted/80">{done ? 'done' : 'running'}</span>
         {hasDetails && (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
             strokeLinecap="round" strokeLinejoin="round"
@@ -638,7 +626,7 @@ function ToolTimelineRow({ tool, done, input, output }) {
         )}
       </button>
       {open && (
-        <div className="pl-7 pr-2.5 pb-2 border-t border-vscode-border/30">
+        <div className="pl-7 pr-2.5 pb-2 border-t border-vscode-border/30 bg-vscode-sidebar/20">
           {inputText && <TruncatedPayload text={inputText} label="Input" />}
           {outputText && <TruncatedPayload text={outputText} label="Result" />}
         </div>
@@ -793,8 +781,8 @@ function TurnResponseGroup({ messages, aiMode = 'agent', provider = 'copilot', l
 
   return (
     <div className="flex justify-start" {...(longPressHandlers || {})}>
-      <div className="max-w-[96%] sm:max-w-[94%] min-w-0 rounded-xl bg-vscode-sidebar/40 p-2 sm:p-2.5" style={{ border: `1px solid ${modeColors[aiMode] || modeColors.agent}80` }}>
-        <div className="text-[10px] uppercase tracking-wider text-vscode-text-muted mb-1 flex items-center gap-2">
+      <div className="max-w-[96%] sm:max-w-[94%] min-w-0 rounded-lg bg-vscode-bg/25 p-2 sm:p-2.5 border-l-2" style={{ borderColor: modeColors[aiMode] || modeColors.agent }}>
+        <div className="text-[10px] uppercase tracking-wider text-vscode-text-muted mb-1.5 flex items-center gap-2">
           <span>{providerDisplayName(provider)}</span>
           <span
             style={{
@@ -809,7 +797,7 @@ function TurnResponseGroup({ messages, aiMode = 'agent', provider = 'copilot', l
             {aiMode.toUpperCase()}
           </span>
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1.5">
           {orderedMessages.map((msg) => {
             if (msg.role === 'reasoning') {
               return <ReasoningBubble key={msg.id} text={msg.text} />;
@@ -817,7 +805,7 @@ function TurnResponseGroup({ messages, aiMode = 'agent', provider = 'copilot', l
 
             if (msg.role === 'tool') {
               return (
-                <div key={msg.id} className="rounded-lg border border-vscode-border/60 bg-vscode-bg/60 overflow-hidden">
+                <div key={msg.id} className="rounded-md bg-transparent overflow-hidden">
                   <ToolTimelineRow
                     tool={msg.tool}
                     done={msg.done}
@@ -1371,7 +1359,7 @@ export default function AgentView({ onOpenDiffFiles }) {
       scheduleDelayedScrollToBottom(120);
 
       try {
-        const created = await createCloudJob(outgoingPrompt, turnId, requestProvider);
+        const created = await createCloudJob(outgoingPrompt, turnId, requestProvider, currentAttachments);
         setMessages((prev) => [
           ...prev,
           {
@@ -1659,10 +1647,34 @@ export default function AgentView({ onOpenDiffFiles }) {
     } catch (err) {
       if (err.name !== 'AbortError') {
         finalizePendingToolCalls(turnId, { error: err.message || 'Tool execution ended with error.' });
-        setMessages((prev) => [
-          ...prev.filter((m) => !(m.role === 'agent' && m.text === '' && m.streaming)),
-          { id: createMessageId(), turnId, role: 'error', text: err.message, aiMode: requestAiMode },
-        ]);
+        setMessages((prev) => {
+          const next = [...prev];
+
+          // Finalize any open streaming bubble for this turn (same logic as the safety net above).
+          // On Safari/WebKit, reader.read() throws "Load failed" even after all data has arrived,
+          // so we must not discard content that was successfully received.
+          for (let i = next.length - 1; i >= 0; i--) {
+            if (next[i].role === 'agent' && next[i].streaming && next[i].turnId === turnId) {
+              const text = typeof next[i].text === 'string' ? next[i].text.trim() : '';
+              if (text) {
+                next[i] = { ...next[i], streaming: false };
+              } else {
+                next.splice(i, 1);
+              }
+              break;
+            }
+          }
+
+          // Only surface the error if no agent content was rendered for this turn at all.
+          // firstAgentId being set means at least one agent bubble was created — the response
+          // arrived. This suppresses spurious "Load failed" / "Failed to fetch" noise from
+          // Safari/WebKit, which throws a network error even when the stream closed cleanly.
+          if (!firstAgentId) {
+            next.push({ id: createMessageId(), turnId, role: 'error', text: err.message, aiMode: requestAiMode });
+          }
+
+          return next;
+        });
       }
     } finally {
       clearTimeout(requestTimeoutId);
@@ -1957,11 +1969,11 @@ export default function AgentView({ onOpenDiffFiles }) {
     return () => clearInterval(id);
   }, [fetchCloudJobs]);
 
-  async function createCloudJob(message, turnId, provider) {
+  async function createCloudJob(message, turnId, provider, attachments) {
     const r = await fetch(apiUrl('/api/jobs'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, aiMode: 'cloud', turnId, provider }),
+      body: JSON.stringify({ message, aiMode: 'cloud', turnId, provider, attachments }),
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
@@ -2030,6 +2042,12 @@ export default function AgentView({ onOpenDiffFiles }) {
       : quietStage === 'writing'
         ? 'Writing response...'
         : 'Thinking...';
+  useEffect(() => {
+    if (!showThinkingPlaceholder || !shouldAutoScrollRef.current) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [showThinkingPlaceholder, thinkingLabel]);
   const sortedCloudJobs = useMemo(
     () => [...cloudJobs].sort((a, b) => Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0)),
     [cloudJobs]

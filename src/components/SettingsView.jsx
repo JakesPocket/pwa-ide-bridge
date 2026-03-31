@@ -8,6 +8,16 @@ const CHAT_UI_MODEL_KEY = 'pocketide.chat.ui.model.v1';
 const CHAT_UI_EXEC_MODE_KEY = 'pocketide.chat.ui.execMode.v1';
 const CHAT_UI_APPROVAL_KEY = 'pocketide.chat.ui.approval.v1';
 
+function parseCodexDeviceAuthInfo(text) {
+  const source = String(text || '');
+  const urlMatch = source.match(/https?:\/\/[^\s)"']+/i);
+  const codeMatch = source.match(/\b([A-Z0-9]{4,}-[A-Z0-9]{4,})\b/);
+  return {
+    verificationUrl: urlMatch ? urlMatch[0] : '',
+    oneTimeCode: codeMatch ? codeMatch[1] : '',
+  };
+}
+
 function normalizeProviderLabel(value) {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'codex') return 'Codex';
@@ -41,7 +51,7 @@ export default function SettingsView({ onClearCache, onWorkspaceChanged }) {
   const [providerMsg, setProviderMsg] = useState('');
   const [copilotAuthType, setCopilotAuthType] = useState('logged-in-user');
   const [copilotToken, setCopilotToken] = useState('');
-  const [codexModel, setCodexModel] = useState('codex-mini-latest');
+  const [codexModel, setCodexModel] = useState('gpt-5.4');
   const [localApiKey, setLocalApiKey] = useState('');
   const [localBaseUrl, setLocalBaseUrl] = useState('http://127.0.0.1:11434/v1');
   const [localModel, setLocalModel] = useState('qwen2.5-coder:latest');
@@ -49,6 +59,12 @@ export default function SettingsView({ onClearCache, onWorkspaceChanged }) {
   const [localHealthMsg, setLocalHealthMsg] = useState('');
   const [codexLoginBusy, setCodexLoginBusy] = useState(false);
   const [codexLoginOutput, setCodexLoginOutput] = useState('');
+  const [codexLoginModalOpen, setCodexLoginModalOpen] = useState(false);
+  const [codexLoginUrl, setCodexLoginUrl] = useState('');
+  const [codexLoginCode, setCodexLoginCode] = useState('');
+  const [codexLoginStatus, setCodexLoginStatus] = useState('');
+  const [codexCodeCopied, setCodexCodeCopied] = useState(false);
+  const codexCodeInputRef = useRef(null);
 
   const fetchProviderStatus = useCallback(async () => {
     try {
@@ -224,12 +240,44 @@ export default function SettingsView({ onClearCache, onWorkspaceChanged }) {
   async function handleCodexLogin() {
     setCodexLoginBusy(true);
     setCodexLoginOutput('');
+    setCodexLoginModalOpen(true);
+    setCodexLoginStatus('Preparing secure device login...');
+    setCodexLoginUrl('');
+    setCodexLoginCode('');
+    setCodexCodeCopied(false);
+
+    const applyLoginText = (text) => {
+      const next = String(text || '');
+      setCodexLoginOutput(next);
+      const parsed = parseCodexDeviceAuthInfo(next);
+      if (parsed.verificationUrl) setCodexLoginUrl(parsed.verificationUrl);
+      if (parsed.oneTimeCode) setCodexLoginCode(parsed.oneTimeCode);
+      if (parsed.verificationUrl && parsed.oneTimeCode) {
+        // status intentionally left unchanged
+      }
+    };
+
     try {
       const response = await fetch(apiUrl('/api/providers/codex/login'), { method: 'POST' });
+      if (!response.ok) {
+        const bodyText = await response.text().catch(() => '');
+        const compact = bodyText.replace(/\s+/g, ' ').trim();
+        throw new Error(compact || `Login endpoint failed (${response.status}).`);
+      }
+
+      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+      if (!contentType.includes('text/event-stream')) {
+        const bodyText = await response.text().catch(() => '');
+        throw new Error(bodyText.trim() || 'Login endpoint did not return an event stream.');
+      }
+
       if (!response.body) throw new Error('No response stream.');
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let aggregate = '';
+      let sawOutput = false;
+      let sawDone = false;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -240,17 +288,98 @@ export default function SettingsView({ onClearCache, onWorkspaceChanged }) {
           if (!line.startsWith('data: ')) continue;
           try {
             const data = JSON.parse(line.slice(6));
-            if (data.type === 'output') setCodexLoginOutput((prev) => prev + data.content);
-            if (data.type === 'error') setCodexLoginOutput((prev) => prev + `\nError: ${data.message}`);
+            if (data.type === 'output') {
+              sawOutput = true;
+              aggregate += String(data.content || '');
+              applyLoginText(aggregate);
+            }
+            if (data.type === 'error') {
+              aggregate += `\nError: ${data.message}`;
+              applyLoginText(aggregate);
+              setCodexLoginStatus('Sign-in could not be started. See details below.');
+            }
+            if (data.type === 'done') {
+              sawDone = true;
+              if (Number(data.exitCode || 0) === 0) {
+                setCodexLoginStatus('Login flow finished. Refreshing status...');
+              } else {
+                setCodexLoginStatus('Login ended early. You can try again.');
+              }
+              if (!sawOutput) {
+                aggregate += '\nLogin flow ended without CLI output.';
+                applyLoginText(aggregate);
+              }
+            }
           } catch (_) {}
         }
       }
+
+      if (!sawOutput && !sawDone) {
+        aggregate += '\nNo login events received from backend. Ensure PocketIDE-Server is running the latest code and Codex CLI is installed.';
+        applyLoginText(aggregate);
+        setCodexLoginStatus('No login events received.');
+      }
     } catch (e) {
-      setCodexLoginOutput((prev) => prev + `\nError: ${e.message}`);
+      const next = `${codexLoginOutput}\nError: ${e.message}`.trim();
+      applyLoginText(next);
+      setCodexLoginStatus('Login request failed.');
     } finally {
       setCodexLoginBusy(false);
       fetchProviderStatus();
     }
+  }
+
+  async function copyCodexCodeToClipboard() {
+    if (!codexLoginCode) return;
+    try {
+      const textToCopy = codexLoginCode.trim();
+      let copied = false;
+
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(textToCopy);
+        copied = true;
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = textToCopy;
+        ta.setAttribute('readonly', 'true');
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        copied = document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+
+      if (!copied) throw new Error('copy failed');
+      setCodexCodeCopied(true);
+      setTimeout(() => setCodexCodeCopied(false), 1400);
+      return true;
+    } catch (_) {
+      setCodexCodeCopied(false);
+      return false;
+    }
+  }
+
+  function handleSelectCodexCode() {
+    const input = codexCodeInputRef.current;
+    if (!input) return;
+    input.focus();
+    input.select();
+  }
+
+  function handleOpenCodexLoginLink() {
+    if (!codexLoginUrl) return;
+    const opened = window.open(codexLoginUrl, '_blank', 'noopener,noreferrer');
+    if (!opened) window.location.href = codexLoginUrl;
+  }
+
+  async function handleCopyAndOpenCodexLogin() {
+    const copied = await copyCodexCodeToClipboard();
+    if (!copied && codexCodeInputRef.current) {
+      handleSelectCodexCode();
+    }
+    handleOpenCodexLoginLink();
   }
 
   async function handleSaveLocalAuth() {
@@ -534,18 +663,30 @@ export default function SettingsView({ onClearCache, onWorkspaceChanged }) {
           <div className="px-4 py-3">
             <p className="text-sm text-vscode-text font-medium">Codex (OpenAI Codex CLI)</p>
             <p className="text-xs text-vscode-text-muted mt-0.5">
-              Uses the OpenAI Codex CLI — authenticate with your ChatGPT account instead of an API key.
+              Uses the OpenAI Codex CLI device-auth flow. You can complete sign-in on your phone.
             </p>
             <div className="mt-2 grid grid-cols-1 gap-2">
-              <input
-                type="text"
+              <select
                 value={codexModel}
                 onChange={(e) => setCodexModel(e.target.value)}
-                onFocus={preventScrollOnFocus}
-                placeholder="codex-mini-latest"
                 className="w-full px-3 py-2 rounded-lg text-sm text-vscode-text border border-vscode-border bg-transparent"
                 style={{ outline: 'none' }}
-              />
+              >
+                <optgroup label="Recommended">
+                  <option value="gpt-5.4">gpt-5.4 — Flagship (default)</option>
+                  <option value="gpt-5.4-mini">gpt-5.4-mini — Fast &amp; efficient</option>
+                  <option value="gpt-5.3-codex">gpt-5.3-codex — Best coding</option>
+                  <option value="gpt-5.3-codex-spark">gpt-5.3-codex-spark — Near-instant (Pro)</option>
+                </optgroup>
+                <optgroup label="Alternative">
+                  <option value="gpt-5.2-codex">gpt-5.2-codex</option>
+                  <option value="gpt-5.2">gpt-5.2</option>
+                  <option value="gpt-5.1-codex-max">gpt-5.1-codex-max</option>
+                  <option value="gpt-5.1-codex">gpt-5.1-codex</option>
+                  <option value="gpt-5.1">gpt-5.1</option>
+                  <option value="gpt-5-codex">gpt-5-codex</option>
+                </optgroup>
+              </select>
               <button
                 type="button"
                 onClick={handleSaveCodexAuth}
@@ -553,7 +694,7 @@ export default function SettingsView({ onClearCache, onWorkspaceChanged }) {
                 className="px-3 py-1.5 rounded-lg text-xs font-medium border border-vscode-border text-vscode-text cursor-pointer disabled:opacity-40"
                 style={{ background: 'transparent' }}
               >
-                Save Model
+                Save
               </button>
               <button
                 type="button"
@@ -562,14 +703,9 @@ export default function SettingsView({ onClearCache, onWorkspaceChanged }) {
                 className="px-3 py-1.5 rounded-lg text-xs font-medium border border-vscode-border text-vscode-text cursor-pointer disabled:opacity-40"
                 style={{ background: 'transparent' }}
               >
-                {codexLoginBusy ? 'Authenticating…' : 'Login with ChatGPT'}
+                {codexLoginBusy ? 'Authenticating…' : 'Login with ChatGPT (Phone)'}
               </button>
             </div>
-            {codexLoginOutput && (
-              <pre className="mt-2 p-2 rounded text-[10px] text-vscode-text-muted bg-vscode-bg overflow-auto max-h-40 whitespace-pre-wrap break-all">
-                {codexLoginOutput}
-              </pre>
-            )}
             <p className="text-[11px] text-vscode-text-muted mt-2">
               CLI: {providerStatus?.codex?.cliInstalled ? 'Installed' : 'Not installed'}
               {' · '}
@@ -648,6 +784,74 @@ export default function SettingsView({ onClearCache, onWorkspaceChanged }) {
           <p className="text-xs text-vscode-text-muted mt-2 px-1">{providerMsg}</p>
         )}
       </div>
+
+      {codexLoginModalOpen && (
+        <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-3" onClick={() => !codexLoginBusy && setCodexLoginModalOpen(false)}>
+          <div className="absolute inset-0 bg-black/70" />
+          <div
+            className="relative w-full max-w-2xl rounded-2xl border border-vscode-border bg-vscode-bg shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-3 border-b border-vscode-border bg-vscode-sidebar/50">
+              <p className="text-sm font-semibold text-vscode-text">Sign In With ChatGPT</p>
+              <p className="text-xs text-vscode-text-muted mt-1">Complete this flow on your phone or in an in-app browser window.</p>
+            </div>
+
+            <div className="px-4 py-3 border-b border-vscode-border bg-vscode-sidebar/20">
+              <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+                <input
+                  ref={codexCodeInputRef}
+                  type="text"
+                  readOnly
+                  onClick={handleSelectCodexCode}
+                  value={codexLoginCode || 'Waiting for code...'}
+                  className="w-full px-3 py-1.5 rounded-lg border border-vscode-border bg-vscode-bg/80 text-sm text-center font-semibold tracking-wider text-vscode-text"
+                  style={{ outline: 'none' }}
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyAndOpenCodexLogin}
+                  disabled={!codexLoginUrl}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium border border-vscode-border text-vscode-text disabled:opacity-40"
+                  style={{ background: 'transparent' }}
+                >
+                  {codexCodeCopied ? 'Copied' : 'Copy Code and Open Login'}
+                </button>
+              </div>
+
+              {codexLoginUrl && (
+                <p className="mt-2 text-[10px] text-vscode-text-muted break-all text-right">{codexLoginUrl}</p>
+              )}
+            </div>
+
+            <div className="px-4 py-3">
+              <div className="rounded-xl border border-vscode-border bg-vscode-sidebar/20 px-3 py-3 text-xs text-vscode-text-muted leading-relaxed">
+                {codexLoginUrl
+                  ? 'Tap "Copy Code and Open Login" to copy the code and open the secure ChatGPT login page. Return here and keep this modal open while status updates.'
+                  : 'Waiting for login URL and code from Codex...'}
+              </div>
+
+              {codexLoginOutput && /error:/i.test(codexLoginOutput) && (
+                <pre className="mt-2 rounded-xl border border-red-900/60 bg-red-900/20 px-3 py-2 text-[10px] text-red-300 whitespace-pre-wrap break-all max-h-28 overflow-auto">
+                  {codexLoginOutput}
+                </pre>
+              )}
+            </div>
+
+            <div className="px-4 py-3 border-t border-vscode-border flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCodexLoginModalOpen(false)}
+                disabled={codexLoginBusy}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium border border-vscode-border text-vscode-text disabled:opacity-40"
+                style={{ background: 'transparent' }}
+              >
+                {codexLoginBusy ? 'Waiting...' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

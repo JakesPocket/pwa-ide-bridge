@@ -9,6 +9,8 @@ import {
   highlightActiveLine,
   highlightActiveLineGutter,
   Decoration,
+  GutterMarker,
+  gutterLineClass,
 } from '@codemirror/view';
 import { javascript } from '@codemirror/lang-javascript';
 import { python } from '@codemirror/lang-python';
@@ -31,6 +33,79 @@ function readInitialFileContents() {
     }
   }
   return next;
+}
+
+function summarizeDiffLineRanges(lineNumbers) {
+  const sorted = [...lineNumbers].sort((a, b) => a - b);
+  const ranges = [];
+  for (const lineNo of sorted) {
+    const last = ranges[ranges.length - 1];
+    if (last && lineNo === last.end + 1) {
+      last.end = lineNo;
+    } else {
+      ranges.push({ start: lineNo, end: lineNo });
+    }
+  }
+  return ranges;
+}
+
+class DiffAddedGutterMarker extends GutterMarker {
+  get elementClass() { return 'cm-file-diff-added-gutter'; }
+}
+
+class DiffRemovedGutterMarker extends GutterMarker {
+  get elementClass() { return 'cm-file-diff-removed-gutter'; }
+}
+
+const ADDED_GUTTER_MARKER = new DiffAddedGutterMarker();
+const REMOVED_GUTTER_MARKER = new DiffRemovedGutterMarker();
+
+function buildOverviewMarkers(patchText, maxDocLines) {
+  if (!patchText || typeof patchText !== 'string' || maxDocLines < 1) return [];
+
+  const added = new Set();
+  const removedAnchors = new Set();
+  const lines = patchText.split('\n');
+  let i = 0;
+
+  while (i < lines.length) {
+    const header = lines[i].match(/^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@/);
+    if (!header) {
+      i += 1;
+      continue;
+    }
+
+    let newLineNo = parseInt(header[3], 10) || 1;
+    i += 1;
+
+    while (i < lines.length && !lines[i].startsWith('@@ ')) {
+      const line = lines[i] || '';
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        if (newLineNo >= 1 && newLineNo <= maxDocLines) added.add(newLineNo);
+        newLineNo += 1;
+      } else if (line.startsWith('-') && !line.startsWith('---')) {
+        const anchor = Math.min(Math.max(1, newLineNo), maxDocLines);
+        if (anchor >= 1 && anchor <= maxDocLines) removedAnchors.add(anchor);
+      } else if (line.startsWith(' ')) {
+        newLineNo += 1;
+      }
+      i += 1;
+    }
+  }
+
+  const markers = [];
+  for (const range of summarizeDiffLineRanges(added)) {
+    const top = ((range.start - 1) / maxDocLines) * 100;
+    const height = Math.max(((range.end - range.start + 1) / maxDocLines) * 100, 0.6);
+    markers.push({ top, height, kind: 'added' });
+  }
+  for (const range of summarizeDiffLineRanges(removedAnchors)) {
+    const top = ((range.start - 1) / maxDocLines) * 100;
+    const height = Math.max(((range.end - range.start + 1) / maxDocLines) * 100, 0.6);
+    markers.push({ top, height, kind: 'removed' });
+  }
+
+  return markers.sort((a, b) => a.top - b.top);
 }
 
 function IconClose() {
@@ -152,18 +227,61 @@ export default function EditorView({ openFiles, activeFilePath, diffByPath = {},
     });
   }
 
+  function createDiffGutterField(patchText) {
+    const buildMarkers = (doc) => {
+      const builder = new RangeSetBuilder();
+      const { added, removedAnchors } = parsePatchLineHighlights(patchText, doc.lines);
+
+      for (const lineNo of added) {
+        const line = doc.line(lineNo);
+        builder.add(line.from, line.from, ADDED_GUTTER_MARKER);
+      }
+
+      for (const lineNo of removedAnchors) {
+        const line = doc.line(lineNo);
+        builder.add(line.from, line.from, REMOVED_GUTTER_MARKER);
+      }
+
+      return builder.finish();
+    };
+
+    return StateField.define({
+      create(state) {
+        return buildMarkers(state.doc);
+      },
+      update(markers, tr) {
+        if (tr.docChanged) return buildMarkers(tr.state.doc);
+        return markers;
+      },
+      provide(field) {
+        return gutterLineClass.from(field);
+      },
+    });
+  }
+
   function buildDiffExtensions(filePath) {
     const patch = diffByPathRef.current[filePath]?.patch;
     if (!patch) return [];
 
     return [
       createDiffDecorationField(patch),
+      createDiffGutterField(patch),
       CodeMirrorView.theme({
         '.cm-file-diff-added': {
-          backgroundColor: 'rgba(44, 160, 44, 0.20)',
+          backgroundColor: 'rgba(46, 160, 67, 0.22)',
+          boxShadow: 'inset 2px 0 0 rgba(46, 160, 67, 0.85)',
         },
         '.cm-file-diff-removed': {
-          backgroundColor: 'rgba(180, 50, 50, 0.20)',
+          backgroundColor: 'rgba(190, 60, 60, 0.22)',
+          boxShadow: 'inset 2px 0 0 rgba(190, 60, 60, 0.85)',
+        },
+        '.cm-gutterElement.cm-file-diff-added-gutter': {
+          color: '#7ad98f',
+          backgroundColor: 'rgba(46, 160, 67, 0.10)',
+        },
+        '.cm-gutterElement.cm-file-diff-removed-gutter': {
+          color: '#ff9a9a',
+          backgroundColor: 'rgba(190, 60, 60, 0.10)',
         },
       }),
     ];
@@ -512,6 +630,12 @@ export default function EditorView({ openFiles, activeFilePath, diffByPath = {},
 
   const activeFile = openFiles.find((f) => f.path === activeFilePath);
   const content = activeFilePath ? fileContents[activeFilePath] : undefined;
+  const activePatch = activeFilePath ? (diffByPath[activeFilePath]?.patch || '') : '';
+  const activeDocLines = typeof content === 'string' ? Math.max(1, content.split('\n').length) : 1;
+  const overviewMarkers = useMemo(
+    () => buildOverviewMarkers(activePatch, activeDocLines),
+    [activePatch, activeDocLines],
+  );
   const isLoading = loadingPath === activeFilePath;
   const hasError = errorPath === activeFilePath;
   const isEditMode = activeFilePath ? (editModeByPath[activeFilePath] ?? false) : false;
@@ -538,6 +662,19 @@ export default function EditorView({ openFiles, activeFilePath, diffByPath = {},
     const view = editorViewRef.current;
     if (!view) return;
     undo(view);
+  }
+
+  function handleOverviewLanePointerDown(event) {
+    const view = editorViewRef.current;
+    if (!view) return;
+    const lane = event.currentTarget;
+    const rect = lane.getBoundingClientRect();
+    if (rect.height <= 0) return;
+
+    const ratio = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+    const scroller = view.scrollDOM;
+    const maxScroll = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    scroller.scrollTop = Math.max(0, Math.min(maxScroll, ratio * scroller.scrollHeight - scroller.clientHeight / 2));
   }
 
   function handleRedoClick() {
@@ -641,7 +778,7 @@ export default function EditorView({ openFiles, activeFilePath, diffByPath = {},
                 {hasDiffBadge && (
                   <span className="shrink-0 text-[10px]">
                     <span className="text-green-400">+{added}</span>
-                    <span className="text-red-400">/-{removed}</span>
+                    <span className="text-red-400 ml-1">-{removed}</span>
                   </span>
                 )}
                 <button
@@ -754,7 +891,30 @@ export default function EditorView({ openFiles, activeFilePath, diffByPath = {},
             openFiles.length > 0 && !isLoading && !hasError && content !== undefined ? '' : 'hidden',
           ].join(' ')}
         >
-          <div ref={editorHostRef} className="editor-cm-shell h-full" />
+          <div className="relative h-full">
+            <div ref={editorHostRef} className="editor-cm-shell h-full" />
+            {overviewMarkers.length > 0 && (
+              <button
+                type="button"
+                aria-label="Scroll change overview"
+                onPointerDown={handleOverviewLanePointerDown}
+                className="absolute right-0 top-0 bottom-0 w-[5px] border-l border-vscode-border/70 bg-vscode-sidebar/35"
+                style={{ outline: 'none' }}
+              >
+                {overviewMarkers.map((marker, idx) => (
+                  <div
+                    key={`${marker.kind}-${idx}`}
+                    className="absolute left-[1px] right-[1px] rounded-[1px]"
+                    style={{
+                      top: `${Math.max(0, Math.min(99.5, marker.top))}%`,
+                      height: `${Math.max(0.45, marker.height)}%`,
+                      backgroundColor: marker.kind === 'added' ? 'rgba(84, 206, 111, 0.82)' : 'rgba(233, 107, 107, 0.82)',
+                    }}
+                  />
+                ))}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
