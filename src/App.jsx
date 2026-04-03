@@ -8,28 +8,28 @@ import { apiUrl } from './config/server';
 import { readJson, writeJson, removeItem, getStorage } from './utils/persist';
 import SettingsView from './components/SettingsView';
 
-const APP_STATE_KEY = 'pocketide.app.state.v1';
-const SESSION_SCHEMA_KEY = 'pocketide.session.schema.v1';
+const APP_STATE_KEY = 'pocketcode.app.state.v1';
+const SESSION_SCHEMA_KEY = 'pocketcode.session.schema.v1';
 const SESSION_SCHEMA_VERSION = '2';
 const SESSION_KEYS = [
   APP_STATE_KEY,
-  'pocketide.workspace.activeSubTab.v1',
-  'pocketide.editor.fileContents.v1',
-  'pocketide.agent.messages.v1',
-  'pocketide.agent.input.v1',
-  'pocketide.agent.pendingReviewPaths.v1',
-  'pocketide.agent.ai.mode.v1',
-  'pocketide.agent.ai.provider.v1',
-  'pocketide.agent.ai.approval.v1',
-  'pocketide.agent.ai.execution.v1',
-  'pocketide.agent.ai.model.v1',
-  'pocketide.agent.turnAiMode.v1',
-  'pocketide.agent.turnProvider.v1',
-  'pocketide.agent.cloudJobs.v1',
-  'pocketide.agent.activeSubTab.v1',
-  'pocketide.terminal.scrollback.v1',
+  'pocketcode.workspace.activeSubTab.v1',
+  'pocketcode.editor.fileContents.v1',
+  'pocketcode.agent.messages.v1',
+  'pocketcode.agent.input.v1',
+  'pocketcode.agent.pendingReviewPaths.v1',
+  'pocketcode.agent.ai.mode.v1',
+  'pocketcode.agent.ai.provider.v1',
+  'pocketcode.agent.ai.approval.v1',
+  'pocketcode.agent.ai.execution.v1',
+  'pocketcode.agent.ai.model.v1',
+  'pocketcode.agent.turnAiMode.v1',
+  'pocketcode.agent.turnProvider.v1',
+  'pocketcode.agent.cloudJobs.v1',
+  'pocketcode.agent.activeSubTab.v1',
+  'pocketcode.terminal.scrollback.v1',
 ];
-const VALID_TABS = new Set(['extensions', 'editor', 'ai-chat', 'terminal', 'settings']);
+const VALID_TABS = new Set(['extensions', 'editor', 'ai-agent', 'terminal', 'settings']);
 
 function summarizePatchCounts(patchText) {
   if (!patchText || typeof patchText !== 'string') {
@@ -176,19 +176,19 @@ function App() {
     setActiveFilePath(null);
     setDiffByPath({});
 
-    removeItem('pocketide.agent.messages.v1');
-    removeItem('pocketide.agent.input.v1');
-    removeItem('pocketide.agent.pendingReviewPaths.v1');
-    removeItem('pocketide.agent.ai.mode.v1');
-    removeItem('pocketide.agent.ai.provider.v1');
-    removeItem('pocketide.agent.ai.approval.v1');
-    removeItem('pocketide.agent.ai.execution.v1');
-    removeItem('pocketide.agent.ai.model.v1');
-    removeItem('pocketide.agent.turnAiMode.v1');
-    removeItem('pocketide.agent.turnProvider.v1');
-    removeItem('pocketide.agent.cloudJobs.v1');
-    removeItem('pocketide.agent.activeSubTab.v1');
-    removeItem('pocketide.terminal.scrollback.v1');
+    removeItem('pocketcode.agent.messages.v1');
+    removeItem('pocketcode.agent.input.v1');
+    removeItem('pocketcode.agent.pendingReviewPaths.v1');
+    removeItem('pocketcode.agent.ai.mode.v1');
+    removeItem('pocketcode.agent.ai.provider.v1');
+    removeItem('pocketcode.agent.ai.approval.v1');
+    removeItem('pocketcode.agent.ai.execution.v1');
+    removeItem('pocketcode.agent.ai.model.v1');
+    removeItem('pocketcode.agent.turnAiMode.v1');
+    removeItem('pocketcode.agent.turnProvider.v1');
+    removeItem('pocketcode.agent.cloudJobs.v1');
+    removeItem('pocketcode.agent.activeSubTab.v1');
+    removeItem('pocketcode.terminal.scrollback.v1');
 
     try {
       await fetch(apiUrl('/api/chat/reset'), { method: 'POST' });
@@ -295,7 +295,7 @@ function App() {
         <div className={activeTab === 'terminal' ? 'h-full min-h-0' : 'hidden h-full min-h-0'}>
           <TerminalView key={`terminal-${workspaceEpoch}`} />
         </div>
-        <div className={activeTab === 'ai-chat' ? 'h-full min-h-0' : 'hidden h-full min-h-0'}>
+        <div className={activeTab === 'ai-agent' ? 'h-full min-h-0' : 'hidden h-full min-h-0'}>
           <AgentView key={`chat-${workspaceEpoch}`} onOpenDiffFiles={handleOpenDiffFiles} />
         </div>
         <div className={activeTab === 'settings' ? 'h-full min-h-0' : 'hidden h-full min-h-0'}>

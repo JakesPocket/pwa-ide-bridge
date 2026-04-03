@@ -3,7 +3,7 @@ import { apiUrl } from '../config/server';
 import { readText, writeText } from '../utils/persist';
 import { preventScrollOnFocus } from '../utils/preventScrollOnFocus';
 
-const EXTENSIONS_TAB_KEY = 'pocketide.extensions.activeSubTab.v1';
+const EXTENSIONS_TAB_KEY = 'pocketcode.workspace.activeSubTab.v1';
 
 function IconFolder({ open }) {
   return (

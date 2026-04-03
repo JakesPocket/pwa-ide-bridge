@@ -1,21 +1,24 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import copilotIcon from '../assets/icons/providers/copilot.svg';
+import codexIcon from '../assets/icons/providers/codex.svg';
+import localIcon from '../assets/icons/providers/local.svg';
 import { apiUrl } from '../config/server';
 import { readJson, writeJson, readText, writeText } from '../utils/persist';
 import { preventScrollOnFocus } from '../utils/preventScrollOnFocus';
 
 const REQUEST_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
-const CHAT_AUTO_CLOUD_AFTER_MS = 45 * 1000; // Promote long live streams to Cloud after 45s.
+const CHAT_AUTO_CLOUD_AFTER_MS = 105 * 1000; // Promote long live streams to Cloud after 105s (1m 45s).
 
-const CHAT_MESSAGES_KEY = 'pocketide.agent.messages.v1';
-const CHAT_INPUT_KEY = 'pocketide.agent.input.v1';
-const CHAT_PENDING_REVIEW_KEY = 'pocketide.agent.pendingReviewPaths.v1';
-const CHAT_UI_AGENT_KEY = 'pocketide.agent.ai.mode.v1';
-const CHAT_UI_PROVIDER_KEY = 'pocketide.agent.ai.provider.v1';
-const CHAT_UI_EXEC_MODE_KEY = 'pocketide.agent.ai.execution.v1';
-const CHAT_TURN_AI_MODES_KEY = 'pocketide.agent.turnAiMode.v1';
-const CHAT_TURN_PROVIDERS_KEY = 'pocketide.agent.turnProvider.v1';
-const CHAT_CLOUD_JOBS_KEY = 'pocketide.agent.cloudJobs.v1';
-const CHAT_VIEW_TAB_KEY = 'pocketide.agent.activeSubTab.v1';
+const CHAT_MESSAGES_KEY = 'pocketcode.agent.messages.v1';
+const CHAT_INPUT_KEY = 'pocketcode.agent.input.v1';
+const CHAT_PENDING_REVIEW_KEY = 'pocketcode.agent.pendingReviewPaths.v1';
+const CHAT_UI_AGENT_KEY = 'pocketcode.agent.ai.mode.v1';
+const CHAT_UI_PROVIDER_KEY = 'pocketcode.agent.ai.provider.v1';
+const CHAT_UI_EXEC_MODE_KEY = 'pocketcode.agent.ai.execution.v1';
+const CHAT_TURN_AI_MODES_KEY = 'pocketcode.agent.turnAiMode.v1';
+const CHAT_TURN_PROVIDERS_KEY = 'pocketcode.agent.turnProvider.v1';
+const CHAT_CLOUD_JOBS_KEY = 'pocketcode.agent.cloudJobs.v1';
+const CHAT_VIEW_TAB_KEY = 'pocketcode.agent.activeSubTab.v1';
 
 function normalizeMode(value) {
   const mode = String(value || '').toLowerCase().trim();
@@ -39,7 +42,7 @@ function normalizeProvider(value) {
 }
 
 function resolveAutoCloudPromotionMs() {
-  const raw = readText('pocketide.agent.chatAutoCloudMs.v1', '');
+  const raw = readText('pocketcode.agent.chatAutoCloudMs.v1', '');
   const parsed = Number.parseInt(String(raw || ''), 10);
   if (Number.isFinite(parsed) && parsed >= 10_000 && parsed <= 240_000) return parsed;
   return CHAT_AUTO_CLOUD_AFTER_MS;
@@ -52,51 +55,32 @@ function providerDisplayName(value) {
   return 'Copilot';
 }
 
+function isLikelyClientDisconnectError(err) {
+  const message = String(err?.message || '').toLowerCase();
+  return /load failed|failed to fetch|networkerror|network error|network connection was lost|fetch failed|the internet connection appears to be offline|signal is aborted without reason/i.test(message);
+}
+
 function ProviderIcon({ provider = 'copilot', className = 'w-4 h-4' }) {
   const normalizedProvider = normalizeProvider(provider);
-  
-  if (normalizedProvider === 'codex') {
-    // OpenAI swirl logo
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} title="OpenAI Codex">
-        <path d="M12 2 Q 18 5, 20 12 Q 18 19, 12 22 Q 6 19, 4 12 Q 6 5, 12 2" />
-        <path d="M12 7 Q 16 8, 17 12 Q 16 16, 12 17 Q 8 16, 7 12 Q 8 8, 12 7" />
-      </svg>
-    );
-  }
-  
-  if (normalizedProvider === 'local') {
-    // Local/server icon
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className} title="Local Provider">
-        <rect x="2" y="3" width="20" height="13" rx="1.5" />
-        <circle cx="8" cy="9.5" r="1.2" />
-        <circle cx="16" cy="9.5" r="1.2" />
-        <line x1="6" y1="18" x2="18" y2="18" />
-        <line x1="9" y1="18" x2="9" y2="21" />
-        <line x1="12" y1="18" x2="12" y2="21" />
-        <line x1="15" y1="18" x2="15" y2="21" />
-      </svg>
-    );
-  }
-  
-  // Copilot - robot/agent icon
+  const iconSrc = normalizedProvider === 'codex'
+    ? codexIcon
+    : normalizedProvider === 'local'
+      ? localIcon
+      : copilotIcon;
+
+  const title = normalizedProvider === 'codex'
+    ? 'OpenAI Codex'
+    : normalizedProvider === 'local'
+      ? 'Local Provider'
+      : 'GitHub Copilot';
+
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} title="GitHub Copilot">
-      {/* Head shape */}
-      <ellipse cx="12" cy="12" rx="10" ry="10.5" opacity="0.2" />
-      {/* Left eye */}
-      <circle cx="8" cy="8.5" r="3" />
-      <circle cx="8" cy="8.5" r="1.8" fill="white" />
-      {/* Right eye */}
-      <circle cx="16" cy="8.5" r="3" />
-      <circle cx="16" cy="8.5" r="1.8" fill="white" />
-      {/* Mouth */}
-      <rect x="7" y="14.5" width="10" height="4" rx="1.5" />
-      {/* Mouth details */}
-      <rect x="9.2" y="16" width="2" height="2" rx="0.3" fill="white" />
-      <rect x="12.8" y="16" width="2" height="2" rx="0.3" fill="white" />
-    </svg>
+    <img
+      src={iconSrc}
+      alt={title}
+      className={`${className} object-contain`}
+      title={title}
+    />
   );
 }
 
@@ -1809,6 +1793,7 @@ export default function AgentView({ onOpenDiffFiles }) {
 
     } catch (err) {
       if (err.name !== 'AbortError') {
+        const disconnectLike = isLikelyClientDisconnectError(err);
         finalizePendingToolCalls(turnId, { error: err.message || 'Tool execution ended with error.' });
         setMessages((prev) => {
           const next = [...prev];
@@ -1832,7 +1817,15 @@ export default function AgentView({ onOpenDiffFiles }) {
           // firstAgentId being set means at least one agent bubble was created — the response
           // arrived. This suppresses spurious "Load failed" / "Failed to fetch" noise from
           // Safari/WebKit, which throws a network error even when the stream closed cleanly.
-          if (!firstAgentId) {
+          if (disconnectLike) {
+            next.push({
+              id: createMessageId(),
+              turnId,
+              role: 'error',
+              text: 'Client disconnected during the live chat stream. The connection to the server was interrupted before completion.',
+              aiMode: requestAiMode,
+            });
+          } else if (!firstAgentId) {
             next.push({ id: createMessageId(), turnId, role: 'error', text: err.message, aiMode: requestAiMode });
           }
 
@@ -1841,7 +1834,13 @@ export default function AgentView({ onOpenDiffFiles }) {
       } else if (!autoPromotedToCloud && activeTurnRef.current === turnId) {
         setMessages((prev) => [
           ...prev,
-          { id: createMessageId(), turnId, role: 'error', text: 'Request was cancelled before completion.', aiMode: requestAiMode },
+          {
+            id: createMessageId(),
+            turnId,
+            role: 'error',
+            text: 'Client disconnected or the live request was cancelled before completion.',
+            aiMode: requestAiMode,
+          },
         ]);
       }
     } finally {

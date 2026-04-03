@@ -3,10 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRONTEND_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-SERVER_DIR="$(cd "${FRONTEND_DIR}/../PocketIDE-Server" && pwd)"
+SERVER_DIR="$(cd "${FRONTEND_DIR}/../PocketCode-Server" && pwd)"
 
 if [[ ! -d "${SERVER_DIR}" ]]; then
-  echo "[dev-up] Could not find PocketIDE-Server at: ${SERVER_DIR}"
+  echo "[dev-up] Could not find PocketCode-Server at: ${SERVER_DIR}"
   exit 1
 fi
 
@@ -60,7 +60,7 @@ trap cleanup INT TERM EXIT
 free_port 3000
 free_port 5173
 
-echo "[dev-up] Starting backend (PocketIDE-Server) on :3000"
+echo "[dev-up] Starting backend (PocketCode-Server) on :3000"
 (
   cd "${SERVER_DIR}"
   node index.js
@@ -73,7 +73,7 @@ if ! kill -0 "${BACKEND_PID}" 2>/dev/null; then
   exit 1
 fi
 
-echo "[dev-up] Starting frontend (PocketIDE) on :5173"
+echo "[dev-up] Starting frontend (PocketCode) on :5173"
 (
   cd "${FRONTEND_DIR}"
   npm run dev

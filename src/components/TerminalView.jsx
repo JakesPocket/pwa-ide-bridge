@@ -6,7 +6,7 @@ import { SOCKET_URL } from '../config/server';
 import { readText, writeText } from '../utils/persist';
 import '@xterm/xterm/css/xterm.css';
 
-const TERMINAL_SCROLLBACK_KEY = 'pocketide.terminal.scrollback.v1';
+const TERMINAL_SCROLLBACK_KEY = 'pocketcode.terminal.scrollback.v1';
 const MAX_SCROLLBACK_SNAPSHOT = 120000;
 
 export default function TerminalView() {

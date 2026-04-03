@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  pocketide-frontend:
+  pocketcode-frontend:
     image: node:20-alpine
-    container_name: pocketide-frontend
+    container_name: pocketcode-frontend
     working_dir: /app
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5174"
     ports:
@@ -15,5 +15,5 @@ services:
       - VITE_SERVER_URL=${VITE_SERVER_URL:-http://host.docker.internal:3000}
     restart: unless-stopped
 
-# The backend runs from the PocketIDE-Server repository as a separate service.
+# The backend runs from the PocketCode-Server repository as a separate service.
 # Override VITE_SERVER_URL if your backend is exposed on a Codespace URL.

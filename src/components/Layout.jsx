@@ -1,12 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { readText } from '../utils/persist';
+import copilotIcon from '../assets/icons/providers/copilot.svg';
+import codexIcon from '../assets/icons/providers/codex.svg';
+import localIcon from '../assets/icons/providers/local.svg';
 
 // ─── Nav bar spacing ──────────────────────────────────────────────────────────
-// Tweak these to adjust gaps around the floating nav bar.
-const NAV_TOP_GAP_PX = 8;             // gap between content area and top of nav bar
-const NAV_BOTTOM_GAP_PX = 20;         // space below nav bar when keyboard is closed (0 when open)
-const NAV_SIDE_MARGIN_PX = 16;        // left/right margin that makes the nav bar "float"
-const NAV_SAFE_AREA_EXTEND_PX = 0;   // how far the nav bar dips below 100dvh into the iOS safe area
+// Tweak these to adjust gaps around the floating nav bar per display mode.
+const NAV_SPACING_BROWSER_PX = {
+  topGap: 8,
+  bottomGap: 25,
+  bottomDangerPush: 0,
+  sideMargin: 16,
+};
+
+const NAV_SPACING_STANDALONE_PX = {
+  topGap: 8,
+  bottomGap: 20,
+  bottomDangerPush: 0,
+  sideMargin: 16,
+};
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Keep the app shell pinned to the pre-keyboard viewport height. On iOS Safari,
@@ -83,25 +95,6 @@ function useAppViewportHeight() {
     };
   }, []);
 
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const nextHeight = `${metrics.height}px`;
-    const docEl = document.documentElement;
-    const body = document.body;
-
-    docEl.style.setProperty('--app-vh', nextHeight);
-    if (body) {
-      body.style.setProperty('--app-vh', nextHeight);
-    }
-
-    return () => {
-      docEl.style.removeProperty('--app-vh');
-      if (body) {
-        body.style.removeProperty('--app-vh');
-      }
-    };
-  }, [metrics.height]);
-
   return metrics;
 }
 
@@ -177,7 +170,7 @@ function IconTerminal() {
 }
 
 function IconChat() {
-  const PROVIDER_KEY = 'pocketide.agent.ai.provider.v1';
+  const PROVIDER_KEY = 'pocketcode.agent.ai.provider.v1';
 
   function readProviderFromStorage() {
     const raw = readText(PROVIDER_KEY, 'copilot');
@@ -198,49 +191,13 @@ function IconChat() {
     return () => clearInterval(timer);
   }, []);
 
-  if (provider === 'codex') {
-    // OpenAI swirl logo
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6" aria-hidden="true">
-        <path d="M12 2 Q 18 5, 20 12 Q 18 19, 12 22 Q 6 19, 4 12 Q 6 5, 12 2" />
-        <path d="M12 7 Q 16 8, 17 12 Q 16 16, 12 17 Q 8 16, 7 12 Q 8 8, 12 7" />
-      </svg>
-    );
-  }
+  const iconSrc = provider === 'codex'
+    ? codexIcon
+    : provider === 'local'
+      ? localIcon
+      : copilotIcon;
 
-  if (provider === 'local') {
-    // Local/server icon
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6" aria-hidden="true">
-        <rect x="2" y="3" width="20" height="13" rx="1.5" />
-        <circle cx="8" cy="9.5" r="1.2" />
-        <circle cx="16" cy="9.5" r="1.2" />
-        <line x1="6" y1="18" x2="18" y2="18" />
-        <line x1="9" y1="18" x2="9" y2="21" />
-        <line x1="12" y1="18" x2="12" y2="21" />
-        <line x1="15" y1="18" x2="15" y2="21" />
-      </svg>
-    );
-  }
-
-  // Copilot - robot/agent icon
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6" aria-hidden="true">
-      {/* Head shape */}
-      <ellipse cx="12" cy="12" rx="10" ry="10.5" opacity="0.2" />
-      {/* Left eye */}
-      <circle cx="8" cy="8.5" r="3" />
-      <circle cx="8" cy="8.5" r="1.8" fill="white" />
-      {/* Right eye */}
-      <circle cx="16" cy="8.5" r="3" />
-      <circle cx="16" cy="8.5" r="1.8" fill="white" />
-      {/* Mouth */}
-      <rect x="7" y="14.5" width="10" height="4" rx="1.5" />
-      {/* Mouth details */}
-      <rect x="9.2" y="16" width="2" height="2" rx="0.3" fill="white" />
-      <rect x="12.8" y="16" width="2" height="2" rx="0.3" fill="white" />
-    </svg>
-  );
+  return <img src={iconSrc} alt="provider" className="w-6 h-6 object-contain" aria-hidden="true" />;
 }
 
 function IconSettings() {
@@ -256,7 +213,7 @@ function IconSettings() {
 const TAB_ITEMS = [
   { id: 'extensions', label: 'Workspace' },
   { id: 'editor',     label: 'Editor'   },
-  { id: 'ai-chat',    label: 'AI Chat'  },
+  { id: 'ai-agent',    label: 'AI Agent'  },
   { id: 'terminal',   label: 'Terminal' },
   { id: 'settings',   label: 'Settings' },
 ];
@@ -264,7 +221,7 @@ const TAB_ITEMS = [
 function TabIcon({ id, isActive }) {
   if (id === 'extensions') return <IconLayers />;
   if (id === 'editor')     return <IconFile />;
-  if (id === 'ai-chat')    return <IconChat />;
+  if (id === 'ai-agent')    return <IconChat />;
   if (id === 'terminal')   return <IconTerminal />;
   if (id === 'settings')   return <IconSettings />;
   return null;
@@ -272,9 +229,12 @@ function TabIcon({ id, isActive }) {
 
 export default function Layout({ activeTab, onTabChange, children }) {
   const { keyboardOpen } = useAppViewportHeight();
+  const isStandaloneApp = useIsStandaloneApp();
   const layoutRef = useRef(null);
   const touchStartYRef = useRef(null);
-  const navBottomOffsetPx = keyboardOpen ? 8 : NAV_BOTTOM_GAP_PX;
+  const navSpacing = isStandaloneApp ? NAV_SPACING_STANDALONE_PX : NAV_SPACING_BROWSER_PX;
+  const navBottomOffsetPx = keyboardOpen ? 8 : navSpacing.bottomGap;
+  const navBottomDangerPushPx = keyboardOpen ? 0 : navSpacing.bottomDangerPush;
   const activeTabIndex = Math.max(0, TAB_ITEMS.findIndex((tab) => tab.id === activeTab));
 
   function findScrollableAncestor(startNode, boundaryNode) {
@@ -357,15 +317,14 @@ export default function Layout({ activeTab, onTabChange, children }) {
       ref={layoutRef}
       className="flex min-h-0 flex-col"
       style={{
-        minHeight: 'var(--app-vh, 100dvh)',
-        height: 'var(--app-vh, 100dvh)',
-        maxHeight: 'var(--app-vh, 100dvh)',
+        minHeight: 'var(--app-full-vh)',
+        height: 'var(--app-full-vh)',
+        maxHeight: 'var(--app-full-vh)',
         paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingBottom: 0,
         overflow: 'visible',
         overscrollBehavior: 'none',
         WebkitOverflowScrolling: 'touch',
-        borderTop: '1px solid white',
-        borderBottom: '1px solid white',
       }}
     >
       {/* Main content — leave room for the nav bar via padding so nothing hides under it */}
@@ -375,8 +334,6 @@ export default function Layout({ activeTab, onTabChange, children }) {
           overflow: 'hidden',
           overscrollBehavior: 'none',
           WebkitOverflowScrolling: 'auto',
-          borderTop: '1px solid white',
-          borderBottom: '1px solid white',
           height: '100%',
           maxHeight: '100%',
         }}
@@ -395,13 +352,12 @@ export default function Layout({ activeTab, onTabChange, children }) {
           WebkitBackdropFilter: 'blur(20px) saturate(180%)',
           border: '1px solid rgba(255,255,255,0.10)',
           borderRadius: 9999,
-          boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
           padding: '2px',
-          marginLeft: NAV_SIDE_MARGIN_PX,
-          marginRight: NAV_SIDE_MARGIN_PX,
-          marginTop: NAV_TOP_GAP_PX,
-          marginBottom: `${navBottomOffsetPx - NAV_SAFE_AREA_EXTEND_PX}px`,
-          width: `calc(100% - ${NAV_SIDE_MARGIN_PX * 2}px)`,
+          marginLeft: navSpacing.sideMargin,
+          marginRight: navSpacing.sideMargin,
+          marginTop: navSpacing.topGap,
+          marginBottom: `${navBottomOffsetPx - navBottomDangerPushPx}px`,
+          width: `calc(100% - ${navSpacing.sideMargin * 2}px)`,
         }}
       >
         <span

@@ -1,7 +1,7 @@
 {
-  "name": "PocketIDE",
-  "short_name": "PocketIDE",
-  "description": "A mobile-first IDE with terminal, editor and AI chat",
+  "name": "PocketCode",
+  "short_name": "PocketCode",
+  "description": "A mobile-first IDE with terminal, editor and AI agent",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0d0d0f",

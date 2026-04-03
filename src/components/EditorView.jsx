@@ -19,7 +19,7 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import { apiUrl } from '../config/server';
 import { readJson, writeJson } from '../utils/persist';
 
-const EDITOR_CONTENTS_KEY = 'pocketide.editor.fileContents.v1';
+const EDITOR_CONTENTS_KEY = 'pocketcode.editor.fileContents.v1';
 
 function readInitialFileContents() {
   const stored = readJson(EDITOR_CONTENTS_KEY, {});
@@ -859,7 +859,7 @@ export default function EditorView({ openFiles, activeFilePath, diffByPath = {},
                     : 'bg-transparent text-vscode-text border-vscode-border hover:bg-vscode-sidebar-hover'),
               ].join(' ')}
             >
-              {saveBusy ? 'Saving...' : (isEditMode ? 'Save' : 'Edit')}
+              {saveBusy ? 'Saving...' : (isEditMode ? (isDirty ? 'Save' : 'Done') : 'Edit')}
             </button>
           </div>
         </div>
