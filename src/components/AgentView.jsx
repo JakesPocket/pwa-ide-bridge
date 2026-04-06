@@ -292,7 +292,7 @@ function readInitialTurnProviders() {
 
 function normalizeCloudJob(job) {
   if (!job || typeof job !== 'object') return null;
-  const jobId = typeof job.jobId === 'string' && job.jobId ? job.jobId : null;
+  const jobId = typeof job.jobId === 'string' && job.jobId ? job.jobId.toUpperCase() : null;
   if (!jobId) return null;
 
   return {
@@ -2287,7 +2287,8 @@ export default function AgentView({ onOpenDiffFiles }) {
 
   async function handleCancelCloudJob(jobId) {
     try {
-      const r = await fetch(apiUrl(`/api/jobs/${encodeURIComponent(jobId)}/cancel`), {
+      const normalizedJobId = jobId.toUpperCase();
+      const r = await fetch(apiUrl(`/api/jobs/${encodeURIComponent(normalizedJobId)}/cancel`), {
         method: 'POST',
       });
       const data = await r.json().catch(() => ({}));
