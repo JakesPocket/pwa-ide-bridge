@@ -116,7 +116,7 @@ function createMessageId() {
 }
 
 function createTurnCode() {
-  const chars = '0123456789abcdefghijklmnopqrstuvwxyz';
+  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   let code = '';
   for (let i = 0; i < 6; i++) {
     code += chars[Math.floor(Math.random() * chars.length)];
@@ -1305,20 +1305,28 @@ export default function AgentView({ onOpenDiffFiles }) {
     };
   }, [viewTab, streaming]);
 
-  // Save and restore scroll position when switching tabs
+  // Scroll to bottom on initial mount when chat tab is active
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
+    if (viewTab !== 'chat') return;
+    // On initial load, scroll to bottom
+    requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (el) {
+        el.scrollTop = el.scrollHeight;
+      }
+    });
+  }, []);
 
-    if (viewTab === 'chat') {
-      // Restore scroll position when returning to chat tab
-      requestAnimationFrame(() => {
-        el.scrollTop = savedScrollPositionRef.current;
-      });
-    } else {
-      // Save scroll position when leaving chat tab
-      savedScrollPositionRef.current = el.scrollTop;
-    }
+  // Restore scroll position when returning to chat tab
+  useEffect(() => {
+    if (viewTab !== 'chat') return;
+    const saved = savedScrollPositionRef.current;
+    if (!saved) return;
+    // Wait for the DOM to mount, then restore
+    requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (el) el.scrollTop = saved;
+    });
   }, [viewTab]);
 
   // Auto-scroll only when user is near the bottom.
@@ -1333,6 +1341,7 @@ export default function AgentView({ onOpenDiffFiles }) {
 
   function handleMessagesScroll(e) {
     const el = e.currentTarget;
+    savedScrollPositionRef.current = el.scrollTop;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     const nearBottom = distanceFromBottom < 80;
     shouldAutoScrollRef.current = nearBottom;
@@ -2417,15 +2426,51 @@ export default function AgentView({ onOpenDiffFiles }) {
     [selectedJobId, cloudJobs]
   );
 
-  // Count turns per parent turnId for card badges
-  const turnCountByTurnId = useMemo(() => {
-    const counts = {};
+  // All jobs in the same turn group as the selected job, sorted oldest-first
+  const selectedGroupJobs = useMemo(() => {
+    if (!selectedJob?.turnId) return selectedJob ? [selectedJob] : [];
+    return cloudJobs
+      .filter((j) => j.turnId === selectedJob.turnId)
+      .sort((a, b) => Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0));
+  }, [selectedJob, cloudJobs]);
+
+  // Group jobs by turnId: pick the root (earliest) job per group,
+  // but carry latest status/timestamps and follow-up count forward.
+  const { groupedJobs, turnCountByTurnId } = useMemo(() => {
+    const groups = new Map(); // turnId → array of jobs
+    const orphans = [];       // jobs without turnId
     for (const job of cloudJobs) {
-      const key = job.turnId;
-      if (!key) continue;
-      counts[key] = (counts[key] || 0) + 1;
+      if (!job.turnId) { orphans.push(job); continue; }
+      let g = groups.get(job.turnId);
+      if (!g) { g = []; groups.set(job.turnId, g); }
+      g.push(job);
     }
-    return counts;
+    const result = [];
+    const counts = {};
+    for (const [turnId, jobs] of groups) {
+      // Sort oldest-first to find the root job
+      jobs.sort((a, b) => Date.parse(a.createdAt || 0) - Date.parse(b.createdAt || 0));
+      const root = jobs[0];
+      const latest = jobs[jobs.length - 1];
+      // Find the "active" job (running/queued) if any, else the newest
+      const active = jobs.find(j => j.status === 'running' || j.status === 'queued');
+      counts[turnId] = jobs.length;
+      result.push({
+        ...root,
+        // Show group-level status: if any job is active, show that; otherwise latest
+        _groupStatus: active?.status || latest.status,
+        _groupUpdatedAt: latest.updatedAt || root.updatedAt,
+        _activeJobId: active?.jobId || latest.jobId,
+        _latestJobId: latest.jobId,
+        _followUpCount: jobs.length - 1,
+      });
+    }
+    for (const job of orphans) {
+      result.push({ ...job, _groupStatus: job.status, _groupUpdatedAt: job.updatedAt, _activeJobId: job.jobId, _latestJobId: job.jobId, _followUpCount: 0 });
+    }
+    // Sort by latest activity in the group
+    result.sort((a, b) => Date.parse(b._groupUpdatedAt || 0) - Date.parse(a._groupUpdatedAt || 0));
+    return { groupedJobs: result, turnCountByTurnId: counts };
   }, [cloudJobs]);
 
   const reviewFileSet = new Set(pendingReviewPaths);
@@ -2480,10 +2525,7 @@ export default function AgentView({ onOpenDiffFiles }) {
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [showThinkingPlaceholder, thinkingLabel]);
-  const sortedCloudJobs = useMemo(
-    () => [...cloudJobs].sort((a, b) => Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0)),
-    [cloudJobs]
-  );
+  const sortedCloudJobs = groupedJobs;
   const composerExecutionMode = viewTab === 'tasks' ? 'cloud' : 'chat';
   const composerSurfaceTint = COMPOSER_EXECUTION_SURFACE_TINTS[composerExecutionMode] ?? 'var(--color-vscode-bg)';
   const composerButtonBackgroundTint = COMPOSER_EXECUTION_BUTTON_BACKGROUNDS[composerExecutionMode] ?? 'var(--color-vscode-bg)';
@@ -2496,6 +2538,7 @@ export default function AgentView({ onOpenDiffFiles }) {
       {selectedJob && viewTab === 'tasks' ? (
         <TaskDetailView
           job={selectedJob}
+          groupJobs={selectedGroupJobs}
           onBack={() => setSelectedJobId(null)}
           onSubmitFollowUp={handleTaskFollowUp}
           onCancel={handleCancelCloudJob}
@@ -2628,10 +2671,11 @@ export default function AgentView({ onOpenDiffFiles }) {
             <div className="flex flex-col gap-2 pb-16">
               {sortedCloudJobs.map((job) => (
                 <TaskCard
-                  key={job.jobId}
+                  key={job.turnId || job.jobId}
                   job={job}
-                  turnCount={turnCountByTurnId[job.turnId] || 0}
-                  events={taskEvents[job.jobId]}
+                  groupStatus={job._groupStatus}
+                  followUpCount={job._followUpCount || 0}
+                  events={taskEvents[job._activeJobId] || taskEvents[job.jobId]}
                   onClick={() => setSelectedJobId(job.jobId)}
                 />
               ))}

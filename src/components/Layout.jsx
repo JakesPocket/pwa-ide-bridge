@@ -282,7 +282,6 @@ export default function Layout({ activeTab, onTabChange, children }) {
   const isStandaloneApp = useIsStandaloneApp();
   const layoutRef = useRef(null);
   const touchStartYRef = useRef(null);
-  const [navVisible, setNavVisible] = useState(() => (typeof window === 'undefined'));
   const navSpacing = keyboardOpen
     ? (isStandaloneApp ? NAV_SPACING_KEYBOARD_OPEN_STANDALONE_PX : NAV_SPACING_KEYBOARD_OPEN_BROWSER_PX)
     : isStandaloneApp
@@ -294,71 +293,40 @@ export default function Layout({ activeTab, onTabChange, children }) {
   const navBottomDangerPushPx = navSpacing.bottomDangerPush;
   const activeTabIndex = Math.max(0, TAB_ITEMS.findIndex((tab) => tab.id === activeTab));
   const navMuted = keyboardOpen;
-  const launchLockActive = isStandaloneApp && isIOSDevice() && !navVisible;
-  const shellBackgroundColor = launchLockActive ? LAUNCH_BG_COLOR : RUNTIME_BG_COLOR;
-  const shellRadiusPx = launchLockActive ? `${IOS_LAUNCH_CORNER_RADIUS_PX}px` : '0px';
 
+  // ── iOS splash dismissal ──────────────────────────────────────────────────
+  // The #ios-splash overlay in index.html covers the app while React mounts
+  // and layout settles. Once the viewport has stabilised, fade it out.
   useLayoutEffect(() => {
-    if (typeof window === 'undefined') return undefined;
+    const splash = document.getElementById('ios-splash');
+    if (!splash) return;
 
-    const shouldLockForLaunch = isStandaloneApp && isIOSDevice();
-    if (!shouldLockForLaunch) {
-      setNavVisible(true);
-      return undefined;
-    }
+    // Give the layout a few frames to settle before revealing.
+    let rafId1;
+    let rafId2;
+    let timerId;
 
-    let released = false;
-    let settleTimerId;
-    let fallbackTimerId;
-    const vv = window.visualViewport;
-
-    const release = () => {
-      if (released) return;
-      released = true;
-
-      if (settleTimerId) window.clearTimeout(settleTimerId);
-      if (fallbackTimerId) window.clearTimeout(fallbackTimerId);
-      if (vv) vv.removeEventListener('resize', onViewportResize);
-
-      setNavVisible(true);
-    };
-
-    function onViewportResize() {
-      if (settleTimerId) window.clearTimeout(settleTimerId);
-      // Wait for resize bursts to settle before revealing nav.
-      settleTimerId = window.setTimeout(release, 80);
-    }
-
-    setNavVisible(false);
-
-    if (vv) {
-      vv.addEventListener('resize', onViewportResize);
-    }
-
-    // Never block rendering forever if iOS doesn't emit a resize event.
-    fallbackTimerId = window.setTimeout(release, 700);
+    rafId1 = requestAnimationFrame(() => {
+      rafId2 = requestAnimationFrame(() => {
+        // One more small delay to let iOS visual viewport finish resizing.
+        timerId = setTimeout(() => {
+          splash.classList.add('fade-out');
+          // Remove from DOM after the CSS transition completes.
+          const removeTimer = setTimeout(() => {
+            splash.remove();
+          }, 300);
+          // Store so we can clean up if unmounted mid-transition (unlikely).
+          timerId = removeTimer;
+        }, 120);
+      });
+    });
 
     return () => {
-      if (settleTimerId) window.clearTimeout(settleTimerId);
-      if (fallbackTimerId) window.clearTimeout(fallbackTimerId);
-      if (vv) vv.removeEventListener('resize', onViewportResize);
+      if (rafId1) cancelAnimationFrame(rafId1);
+      if (rafId2) cancelAnimationFrame(rafId2);
+      if (timerId) clearTimeout(timerId);
     };
-  }, [isStandaloneApp]);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-
-    const launchBg = launchLockActive ? LAUNCH_BG_COLOR : '#181818';
-    const htmlEl = document.documentElement;
-    const bodyEl = document.body;
-    const rootEl = document.getElementById('root');
-
-    [htmlEl, bodyEl, rootEl].forEach((el) => {
-      if (!el) return;
-      el.style.backgroundColor = launchBg;
-      el.style.transition = 'background-color 360ms ease-out';
-    });
-  }, [launchLockActive]);
+  }, []);
 
   function findScrollableAncestor(startNode, boundaryNode) {
     let target = startNode;
@@ -459,9 +427,7 @@ export default function Layout({ activeTab, onTabChange, children }) {
         height: resolvedShellHeight,
         maxHeight: resolvedShellHeight,
         marginTop: resolvedShellOffsetTop,
-        backgroundColor: shellBackgroundColor,
-        borderRadius: shellRadiusPx,
-        transition: LAUNCH_SHELL_TRANSITION,
+        backgroundColor: RUNTIME_BG_COLOR,
         paddingTop: 'env(safe-area-inset-top, 0px)',
         paddingBottom: 0,
         overflow: 'hidden',
@@ -473,24 +439,23 @@ export default function Layout({ activeTab, onTabChange, children }) {
       <main
         className="min-h-0 flex-1"
         style={{
-          backgroundColor: shellBackgroundColor,
-          transition: 'background-color 360ms ease-out',
+          backgroundColor: RUNTIME_BG_COLOR,
           overflow: 'hidden',
           overscrollBehavior: 'none',
           WebkitOverflowScrolling: 'auto',
+
         }}
       >
-        {navVisible ? children : null}
+        {children}
       </main>
 
       {/* ── Bottom Navigation Bar ── */}
-      {navVisible && (
-        <nav
+      <nav
           aria-label="Main navigation"
           className="flex shrink-0 self-center select-none"
           style={{
             position: 'relative',
-            backgroundColor: navMuted ? 'rgba(13, 13, 15, 0.62)' : 'rgba(13, 13, 15, 0.75)',
+            backgroundColor: '#181818',
             backdropFilter: navMuted ? 'blur(16px) saturate(150%)' : 'blur(20px) saturate(180%)',
             WebkitBackdropFilter: navMuted ? 'blur(16px) saturate(150%)' : 'blur(20px) saturate(180%)',
             border: navMuted ? '1px solid rgba(255,255,255,0.07)' : '1px solid rgba(255,255,255,0.10)',
@@ -578,7 +543,6 @@ export default function Layout({ activeTab, onTabChange, children }) {
           );
         })}
         </nav>
-      )}
     </div>
   );
 }

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Cloud Jobs Cache</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        .button {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin: 10px 5px;
+        }
+        .button:hover {
+            background: #1177bb;
+        }
+        .info {
+            background: #2d2d30;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        .success {
+            color: #4ec9b0;
+            font-weight: bold;
+        }
+        .code {
+            font-family: 'Courier New', monospace;
+            background: #1e1e1e;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <h1>PocketCode - Clear Cloud Jobs Cache</h1>
+    
+    <div class="info">
+        <p>This utility clears cached cloud jobs from your browser's localStorage.</p>
+        <p>Use this if you're seeing old job IDs with the long format (e.g., <span class="code">job_1775479895164_gnfpvewk</span>).</p>
+        <p>After clearing, you'll only see new 4-character alphanumeric job IDs (e.g., <span class="code">DG35</span>, <span class="code">J4S9</span>).</p>
+    </div>
+
+    <button class="button" onclick="clearCache()">Clear Cloud Jobs Cache</button>
+    <button class="button" onclick="showCache()">Show Current Cache</button>
+    
+    <div id="result"></div>
+
+    <script>
+        const CACHE_KEY = 'pocketcode.agent.cloudJobs.v1';
+        
+        function clearCache() {
+            try {
+                const before = localStorage.getItem(CACHE_KEY);
+                localStorage.removeItem(CACHE_KEY);
+                const result = document.getElementById('result');
+                result.innerHTML = `
+                    <div class="info success">
+                        ✅ Cache cleared successfully!
+                        <br><br>
+                        Removed ${before ? JSON.parse(before).length : 0} cached jobs.
+                        <br><br>
+                        Refresh your PocketCode app to see only new job IDs.
+                    </div>
+                `;
+            } catch (e) {
+                document.getElementById('result').innerHTML = `
+                    <div class="info">Error: ${e.message}</div>
+                `;
+            }
+        }
+        
+        function showCache() {
+            try {
+                const cached = localStorage.getItem(CACHE_KEY);
+                const result = document.getElementById('result');
+                
+                if (!cached) {
+                    result.innerHTML = `
+                        <div class="info">No cached jobs found.</div>
+                    `;
+                    return;
+                }
+                
+                const jobs = JSON.parse(cached);
+                result.innerHTML = `
+                    <div class="info">
+                        <h3>Cached Jobs (${jobs.length}):</h3>
+                        <pre>${JSON.stringify(jobs, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (e) {
+                document.getElementById('result').innerHTML = `
+                    <div class="info">Error: ${e.message}</div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -77,6 +77,45 @@ export default function SettingsView({ onClearCache, onWorkspaceChanged }) {
   const [copilotLoginStatus, setCopilotLoginStatus] = useState('');
   const [copilotCodeCopied, setCopilotCodeCopied] = useState(false);
   const copilotCodeInputRef = useRef(null);
+  const [restartMsg, setRestartMsg] = useState('');
+  const [restartBusy, setRestartBusy] = useState(null); // 'server' | 'frontend' | 'both' | null
+
+  async function handleRestart(target) {
+    setRestartBusy(target);
+    setRestartMsg('');
+    try {
+      const r = await fetch(apiUrl(`/api/restart/${target}`), { method: 'POST' });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.message || `Failed (${r.status})`);
+      setRestartMsg(data.message || 'Done.');
+      if (target === 'server' || target === 'both') {
+        // Server is restarting — poll until it's back
+        setRestartMsg((prev) => prev + ' Waiting for server...');
+        const start = Date.now();
+        const poll = setInterval(async () => {
+          try {
+            const h = await fetch(apiUrl('/api/health'));
+            if (h.ok) {
+              clearInterval(poll);
+              setRestartMsg('Restart complete.');
+              setRestartBusy(null);
+            }
+          } catch {
+            if (Date.now() - start > 30000) {
+              clearInterval(poll);
+              setRestartMsg('Server did not come back within 30s.');
+              setRestartBusy(null);
+            }
+          }
+        }, 1500);
+      } else {
+        setRestartBusy(null);
+      }
+    } catch (err) {
+      setRestartMsg(err.message || 'Restart failed.');
+      setRestartBusy(null);
+    }
+  }
 
   const fetchProviderStatus = useCallback(async () => {
     try {
@@ -737,6 +776,49 @@ export default function SettingsView({ onClearCache, onWorkspaceChanged }) {
               Clear
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Restart Controls */}
+      <div className="mt-6">
+        <p className="text-[11px] uppercase tracking-widest text-vscode-text-muted mb-3 px-1">
+          Restart
+        </p>
+        <div className="rounded-xl border border-vscode-border overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}>
+          <div className="px-4 py-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleRestart('server')}
+              disabled={!!restartBusy}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium border border-vscode-border text-vscode-text disabled:opacity-40 cursor-pointer"
+              style={{ background: 'transparent' }}
+            >
+              {restartBusy === 'server' ? 'Restarting…' : 'Server'}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRestart('frontend')}
+              disabled={!!restartBusy}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium border border-vscode-border text-vscode-text disabled:opacity-40 cursor-pointer"
+              style={{ background: 'transparent' }}
+            >
+              {restartBusy === 'frontend' ? 'Building…' : 'Frontend'}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRestart('both')}
+              disabled={!!restartBusy}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium border border-vscode-border text-vscode-text disabled:opacity-40 cursor-pointer"
+              style={{ background: 'transparent' }}
+            >
+              {restartBusy === 'both' ? 'Restarting…' : 'Both'}
+            </button>
+          </div>
+          {restartMsg && (
+            <div className="px-4 pb-3">
+              <p className="text-[11px] text-vscode-text-muted">{restartMsg}</p>
+            </div>
+          )}
         </div>
       </div>
 

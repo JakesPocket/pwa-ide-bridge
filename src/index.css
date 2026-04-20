@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 @theme {
-  --color-vscode-bg: #181818;
+  --color-vscode-bg: #000000;
   --color-vscode-nav: #131315;
-  --color-vscode-sidebar: #1c1c1f;
+  --color-vscode-sidebar: #181818;
   --color-vscode-sidebar-hover: #252528;
   --color-vscode-accent: #007acc;
   --color-vscode-accent-dim: rgba(0, 122, 204, 0.15);
@@ -110,4 +110,12 @@ html,
 
 .editor-cm-shell .cm-selectionBackground {
   background-color: rgba(97, 175, 239, 0.3) !important;
+}
+
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slide-up 0.25s ease-out;
 }

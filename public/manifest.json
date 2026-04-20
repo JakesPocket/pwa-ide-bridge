@@ -4,8 +4,8 @@
   "description": "A mobile-first IDE with terminal, editor and AI agent",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#181818",
+  "theme_color": "#181818",
   "orientation": "portrait",
   "icons": [
     {

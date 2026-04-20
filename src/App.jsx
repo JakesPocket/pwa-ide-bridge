@@ -7,7 +7,7 @@ import AgentView from './components/AgentView';
 import { apiUrl } from './config/server';
 import { readJson, writeJson, removeItem, getStorage } from './utils/persist';
 import SettingsView from './components/SettingsView';
-import { useSwipeGesture } from './utils/useSwipeGesture';
+// import { useSwipeGesture } from './utils/useSwipeGesture'; // DISABLED - swipe gestures turned off
 
 const APP_STATE_KEY = 'pocketcode.app.state.v1';
 const SESSION_SCHEMA_KEY = 'pocketcode.session.schema.v1';
@@ -136,25 +136,25 @@ function App() {
   const [workspacePath, setWorkspacePath] = useState(null);
   const [diffByPath, setDiffByPath] = useState({});
 
-  // Swipe gesture handlers for tab navigation
-  const handleSwipeLeft = () => {
-    const currentIndex = TAB_ORDER.indexOf(activeTab);
-    if (currentIndex < TAB_ORDER.length - 1) {
-      setActiveTab(TAB_ORDER[currentIndex + 1]);
-    }
-  };
+  // Swipe gesture handlers for tab navigation - DISABLED
+  // const handleSwipeLeft = () => {
+  //   const currentIndex = TAB_ORDER.indexOf(activeTab);
+  //   if (currentIndex < TAB_ORDER.length - 1) {
+  //     setActiveTab(TAB_ORDER[currentIndex + 1]);
+  //   }
+  // };
 
-  const handleSwipeRight = () => {
-    const currentIndex = TAB_ORDER.indexOf(activeTab);
-    if (currentIndex > 0) {
-      setActiveTab(TAB_ORDER[currentIndex - 1]);
-    }
-  };
+  // const handleSwipeRight = () => {
+  //   const currentIndex = TAB_ORDER.indexOf(activeTab);
+  //   if (currentIndex > 0) {
+  //     setActiveTab(TAB_ORDER[currentIndex - 1]);
+  //   }
+  // };
 
-  const swipeRef = useSwipeGesture(handleSwipeLeft, handleSwipeRight, {
-    minSwipeDistance: 60,
-    maxVerticalDistance: 100,
-  });
+  // const swipeRef = useSwipeGesture(handleSwipeLeft, handleSwipeRight, {
+  //   minSwipeDistance: 60,
+  //   maxVerticalDistance: 100,
+  // });
 
   useEffect(() => {
     fetch(apiUrl('/api/workspace'))
@@ -163,6 +163,28 @@ function App() {
         if (data?.path) setWorkspacePath(data.path);
       })
       .catch(() => {});
+  }, []);
+
+  // When the PWA resumes from a brief iOS suspension (process not killed),
+  // re-verify the server connection and refresh the workspace path.
+  // Polling intervals in child views (AgentView, WorkspaceView) resume
+  // automatically, but the server may have restarted while backgrounded.
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+
+      fetch(apiUrl('/api/workspace'))
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.path) setWorkspacePath(data.path);
+        })
+        .catch(() => {});
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
   useEffect(() => {
@@ -301,7 +323,7 @@ function App() {
   return (
     <>
       <Layout activeTab={activeTab} onTabChange={setActiveTab}>
-        <div ref={swipeRef} className="h-full min-h-0">
+        <div className="h-full min-h-0">
           <div className={activeTab === 'extensions' ? 'h-full min-h-0' : 'hidden h-full min-h-0'}>
             <WorkspaceView key={`workspace-${workspaceEpoch}`} onOpenFile={handleOpenFile} />
           </div>

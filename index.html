@@ -5,7 +5,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#000000" />
+    <meta name="theme-color" content="#181818" />
     <meta name="color-scheme" content="dark" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -18,12 +18,45 @@
         padding: 0;
         width: 100%;
         height: 100%;
-        background: #000000;
+        background: #181818;
+      }
+      /* iOS splash overlay — sits on top of #root until the app is ready */
+      #ios-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
+        background: #181818;
+        overflow: hidden;
+        transition: opacity 0.25s ease-out;
+      }
+      #ios-splash.fade-out { opacity: 0; pointer-events: none; }
+      #ios-splash .splash-msg {
+        position: absolute;
+        left: 0;
+        right: 0;
+        padding: 32px;
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+        font-size: 15px;
+        color: rgba(255,255,255,0.35);
+        text-align: center;
+        line-height: 1.5;
+        -webkit-user-select: none;
+        user-select: none;
       }
     </style>
     <title>PocketCode</title>
   </head>
   <body>
+    <div id="ios-splash"><div class="splash-msg">Waiting for iOS to get its act together…</div></div>
+    <script>
+      // Pin splash text to the physical screen center — immune to iOS viewport gymnastics.
+      (function() {
+        var m = document.querySelector('#ios-splash .splash-msg');
+        if (m) m.style.top = ((screen.height / 2) - (m.offsetHeight / 2)) + 'px';
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
